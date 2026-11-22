@@ -22,7 +22,7 @@ function getS3Client(): S3Client | null {
   globalForS3.s3Client = new S3Client({
     region: process.env.S3_REGION?.trim() || "auto",
     endpoint,
-    forcePathStyle: true,
+    forcePathStyle: false,
     credentials: {
       accessKeyId,
       secretAccessKey,
