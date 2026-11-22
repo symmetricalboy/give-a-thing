@@ -20,15 +20,69 @@ function getGenAI(): GoogleGenAI {
 }
 
 export const GeneratedThingSchema = z.object({
-  name: z.string().min(3).max(110),
-  description: z.string().min(20).max(460),
-  flavorText: z.string().min(10).max(240),
-  uselessTrait: z.string().min(4).max(75),
-  pixelArtBrief: z.string().min(20).max(360),
-  iconAlt: z.string().min(15).max(260),
+  name: z.string().min(2).max(120),
+  description: z.string().min(10).max(500),
+  flavorText: z.string().min(3).max(280),
+  uselessTrait: z.string().min(2).max(80),
+  pixelArtBrief: z.string().min(10).max(1500),
+  iconAlt: z.string().min(5).max(300),
 });
 
 export type GeneratedThingConcept = z.infer<typeof GeneratedThingSchema>;
+
+const RawGeneratedThingSchema = z.object({
+  name: z.string().min(2),
+  description: z.string().min(5),
+  flavorText: z.string().min(2),
+  uselessTrait: z.string().min(2),
+  pixelArtBrief: z.string().min(5),
+  iconAlt: z.string().min(3),
+});
+
+function clampTextCleanly(
+  input: string,
+  maxCodePoints: number,
+  maxUtf8Bytes?: number,
+  stripOuterQuotes = false
+): string {
+  let text = input.replace(/\s+/g, " ").trim();
+  if (stripOuterQuotes) {
+    text = text.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+  }
+
+  const chars = Array.from(text);
+  if (chars.length > maxCodePoints) {
+    const sliced = chars.slice(0, maxCodePoints - 1).join("");
+    const lastSpace = sliced.lastIndexOf(" ");
+    const base =
+      lastSpace > Math.floor(maxCodePoints * 0.65)
+        ? sliced.slice(0, lastSpace).replace(/[,;:\-\s]+$/, "")
+        : sliced.trimEnd();
+    text = `${base}…`;
+  }
+
+  if (maxUtf8Bytes) {
+    while (Buffer.byteLength(text, "utf8") > maxUtf8Bytes && text.length > 2) {
+      const shortened = Array.from(text.replace(/…$/, ""));
+      shortened.pop();
+      text = `${shortened.join("").trimEnd()}…`;
+    }
+  }
+
+  return text;
+}
+
+export function parseGeneratedThingConcept(raw: unknown): GeneratedThingConcept {
+  const initial = RawGeneratedThingSchema.parse(raw);
+  return GeneratedThingSchema.parse({
+    name: clampTextCleanly(initial.name, 116, 236, true),
+    description: clampTextCleanly(initial.description, 490, 1180),
+    flavorText: clampTextCleanly(initial.flavorText, 275, 590, true),
+    uselessTrait: clampTextCleanly(initial.uselessTrait, 78, 156),
+    pixelArtBrief: clampTextCleanly(initial.pixelArtBrief, 1400),
+    iconAlt: clampTextCleanly(initial.iconAlt, 295, 590),
+  });
+}
 
 const THING_JSON_SCHEMA = {
   type: "object",
@@ -36,32 +90,32 @@ const THING_JSON_SCHEMA = {
     name: {
       type: "string",
       description:
-        "A vividly specific, memorable, slightly absurd thing title (4 to 12 words, Title Case, no surrounding quotes).",
+        "A vividly specific, memorable, slightly absurd thing title (4 to 11 words, under 100 characters, Title Case, no surrounding quotes).",
     },
     description: {
       type: "string",
       description:
-        "2-3 crisp sentences written like a cozy 16-bit RPG item inspection box (think EarthBound or Chrono Trigger) describing its physical appearance, odd history, and utter lack of practical utility.",
+        "2-3 crisp sentences (under 420 characters) written like a cozy 16-bit RPG item inspection box (think EarthBound or Chrono Trigger) describing its physical appearance, odd history, and utter lack of practical utility.",
     },
     flavorText: {
       type: "string",
       description:
-        "A short, dryly funny italicized note or quote at the bottom of the thing card (1 sentence, no surrounding quotation marks needed).",
+        "A short, dryly funny italicized note or quote at the bottom of the thing card (1 sentence, under 200 characters, no surrounding quotation marks needed).",
     },
     uselessTrait: {
       type: "string",
       description:
-        "A completely pointless RPG stat or property, e.g. '+0 Defense Against Drizzle', 'Weight: 1.4 Regrets', 'Durability: Suspiciously Sticky'.",
+        "A completely pointless RPG stat or property under 70 characters, e.g. '+0 Defense Against Drizzle', 'Weight: 1.4 Regrets', 'Durability: Suspiciously Sticky'.",
     },
     pixelArtBrief: {
       type: "string",
       description:
-        "Concrete visual description of a single physical emblem representing this thing for a 16-bit SNES inventory icon (translate abstract concepts into an unmistakable tangible vessel or emblem; describe colors, silhouette, and key visual details, no text).",
+        "Concrete visual description (2-4 sentences, under 650 characters) of a single physical emblem representing this thing for a 16-bit SNES inventory icon (translate abstract concepts into an unmistakable tangible vessel or emblem; describe colors, silhouette, and key visual details, no text).",
     },
     iconAlt: {
       type: "string",
       description:
-        "Concise accessible alt text describing the 16-bit pixel-art icon for screen readers.",
+        "Concise accessible alt text (1 sentence, under 240 characters) describing the 16-bit pixel-art icon for screen readers.",
     },
   },
   required: [
@@ -139,7 +193,13 @@ Return JSON strictly matching the schema.`;
     throw new Error("Gemini 4 Carbon returned an empty output_text.");
   }
 
-  const parsed = GeneratedThingSchema.parse(JSON.parse(rawJson));
+  const cleanedJson = rawJson
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  const parsed = parseGeneratedThingConcept(JSON.parse(cleanedJson));
   return {
     concept: parsed,
     interactionId: interaction.id ?? "",

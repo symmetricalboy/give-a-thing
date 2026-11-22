@@ -32,6 +32,7 @@ import {
   getNextUtcMidnightIso,
   isUnlimitedPullAccount,
 } from "../src/lib/generator/pull-service";
+import { parseGeneratedThingConcept } from "../src/lib/generator/gemini";
 
 function collectSourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -299,5 +300,34 @@ describe("Give a Thing — Core Engine Verification", () => {
       true
     );
     expect(decodeURIComponent(intent).toLowerCase()).not.toContain("curio");
+  });
+
+  it("gracefully accepts verbose pixelArtBrief and clamps oversized Gemini fields within ATProtocol lexicon bounds", () => {
+    const verboseBrief =
+      "A single isometric 16-bit SNES inventory emblem of a translucent teal plastic pager with tiny brass buttons, a slightly crooked copper antenna, a miniature green LCD window showing three pixel dots, worn silver belt-clip edges, and warm dithering highlights across its beveled 1990s casing, centered cleanly with a crisp dark pixel outline and zero text anywhere in frame. ".repeat(
+        2
+      );
+    expect(verboseBrief.length).toBeGreaterThan(500);
+
+    const concept = parseGeneratedThingConcept({
+      name: '"TheSlightlyOverlongTitleOfAnUnreasonablySpecificPocketPagerFrom1997"',
+      description: "A delightfully pointless plastic pocket pager. ".repeat(14),
+      flavorText: '"Beeps exclusively when nobody is thinking of you."',
+      uselessTrait:
+        "+0 Signal Strength Across Every Known Continental Time Zone On Earth Today",
+      pixelArtBrief: verboseBrief,
+      iconAlt:
+        "16-bit pixel-art icon of a translucent teal 1990s pager with brass buttons and a crooked copper antenna. ".repeat(
+          4
+        ),
+    });
+
+    expect(concept.name.startsWith('"')).toBe(false);
+    expect(concept.flavorText.startsWith('"')).toBe(false);
+    expect(concept.description.length).toBeLessThanOrEqual(500);
+    expect(concept.uselessTrait.length).toBeLessThanOrEqual(80);
+    expect(concept.iconAlt.length).toBeLessThanOrEqual(300);
+    expect(concept.pixelArtBrief.length).toBeGreaterThan(360);
+    expect(concept.pixelArtBrief.length).toBeLessThanOrEqual(1500);
   });
 });
