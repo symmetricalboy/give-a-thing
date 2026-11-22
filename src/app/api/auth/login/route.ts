@@ -11,7 +11,10 @@ export async function POST(req: NextRequest) {
     const rawHandle = body.handle?.trim().replace(/^@/, "");
     if (!rawHandle) {
       return NextResponse.json(
-        { error: "Please enter your Bluesky handle (e.g. alice.bsky.social)." },
+        {
+          error:
+            "Please enter your ATmosphere Account handle (e.g. alice.bsky.social).",
+        },
         { status: 400 }
       );
     }
@@ -35,7 +38,7 @@ export async function POST(req: NextRequest) {
         error:
           err instanceof Error
             ? err.message
-            : "Could not resolve Bluesky handle or reach your PDS.",
+            : "Could not resolve that ATmosphere Account handle or reach your PDS.",
       },
       { status: 400 }
     );

@@ -25,6 +25,7 @@ import {
 import { getPublicAppUrl } from "@/lib/atproto/oauth";
 import {
   fetchRichBlueskyProfile,
+  searchBlueskyActors,
   type BlueskyProfileLink,
 } from "@/lib/atproto/public-bsky";
 
@@ -36,6 +37,13 @@ export interface PublicUserBrief {
 }
 
 export interface ProfileSocialUser extends PublicUserBrief {
+  viewerFollows: boolean;
+}
+
+export interface DirectoryUserCard extends PublicUserBrief {
+  isRegisteredPlayer: boolean;
+  heldCount: number;
+  discoveredCount: number;
   viewerFollows: boolean;
 }
 
@@ -496,6 +504,196 @@ export async function searchDiscoveryCatalog(params: {
     page,
     pageSize,
   };
+}
+
+export async function searchDirectoryUsers(params: {
+  query?: string;
+  viewerDid?: string | null;
+  limit?: number;
+}): Promise<DirectoryUserCard[]> {
+  const limit = Math.min(Math.max(params.limit ?? 24, 1), 50);
+  const rawQuery = params.query?.trim() ?? "";
+  const cleanQuery = rawQuery.replace(/^@/, "");
+
+  let localUsers: Array<{
+    did: string;
+    handle: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  }> = [];
+  let viewerFollowSet = new Set<string>();
+  let dbAvailable = true;
+
+  try {
+    const db = getDb();
+    const pattern = `%${cleanQuery}%`;
+    const [uRows, fRows] = await Promise.all([
+      db
+        .select({
+          did: schema.users.did,
+          handle: schema.users.handle,
+          displayName: schema.users.displayName,
+          avatarUrl: schema.users.avatarUrl,
+        })
+        .from(schema.users)
+        .where(
+          cleanQuery
+            ? or(
+                ilike(schema.users.handle, pattern),
+                ilike(schema.users.displayName, pattern)
+              )
+            : undefined
+        )
+        .orderBy(desc(schema.users.createdAt))
+        .limit(limit),
+      params.viewerDid
+        ? db
+            .select({ subjectDid: schema.follows.subjectDid })
+            .from(schema.follows)
+            .where(eq(schema.follows.followerDid, params.viewerDid))
+        : Promise.resolve([]),
+    ]);
+    localUsers = uRows;
+    viewerFollowSet = new Set(fRows.map((f) => f.subjectDid));
+  } catch {
+    dbAvailable = false;
+  }
+
+  const remoteActors =
+    cleanQuery.length >= 2 ? await searchBlueskyActors(cleanQuery, 16) : [];
+
+  const mergedByDid = new Map<
+    string,
+    {
+      did: string;
+      handle: string;
+      displayName: string | null;
+      avatarUrl: string | null;
+      isRegisteredPlayer: boolean;
+    }
+  >();
+
+  for (const u of localUsers) {
+    mergedByDid.set(u.did, {
+      ...u,
+      isRegisteredPlayer: true,
+    });
+  }
+
+  if (dbAvailable && remoteActors.length > 0) {
+    try {
+      const db = getDb();
+      const remoteDids = remoteActors.map((a) => a.did);
+      const registeredRemote = await db
+        .select({ did: schema.users.did })
+        .from(schema.users)
+        .where(inArray(schema.users.did, remoteDids));
+      const regSet = new Set(registeredRemote.map((r) => r.did));
+
+      for (const a of remoteActors) {
+        const existing = mergedByDid.get(a.did);
+        if (existing) {
+          mergedByDid.set(a.did, {
+            did: a.did,
+            handle: a.handle || existing.handle,
+            displayName: a.displayName ?? existing.displayName,
+            avatarUrl: a.avatar ?? existing.avatarUrl,
+            isRegisteredPlayer: true,
+          });
+        } else {
+          mergedByDid.set(a.did, {
+            did: a.did,
+            handle: a.handle,
+            displayName: a.displayName ?? null,
+            avatarUrl: a.avatar ?? null,
+            isRegisteredPlayer: regSet.has(a.did),
+          });
+        }
+      }
+    } catch {
+      for (const a of remoteActors) {
+        if (!mergedByDid.has(a.did)) {
+          mergedByDid.set(a.did, {
+            did: a.did,
+            handle: a.handle,
+            displayName: a.displayName ?? null,
+            avatarUrl: a.avatar ?? null,
+            isRegisteredPlayer: false,
+          });
+        }
+      }
+    }
+  } else {
+    for (const a of remoteActors) {
+      if (!mergedByDid.has(a.did)) {
+        mergedByDid.set(a.did, {
+          did: a.did,
+          handle: a.handle,
+          displayName: a.displayName ?? null,
+          avatarUrl: a.avatar ?? null,
+          isRegisteredPlayer: false,
+        });
+      }
+    }
+  }
+
+  const allEntries = Array.from(mergedByDid.values()).slice(0, limit);
+  const playerDids = allEntries
+    .filter((u) => u.isRegisteredPlayer)
+    .map((u) => u.did);
+
+  const heldMap = new Map<string, number>();
+  const discoveredMap = new Map<string, number>();
+
+  if (dbAvailable && playerDids.length > 0) {
+    try {
+      const db = getDb();
+      const [heldCounts, discCounts] = await Promise.all([
+        db
+          .select({
+            did: schema.things.currentOwnerDid,
+            value: count(),
+          })
+          .from(schema.things)
+          .where(inArray(schema.things.currentOwnerDid, playerDids))
+          .groupBy(schema.things.currentOwnerDid),
+        db
+          .select({
+            did: schema.things.discovererDid,
+            value: count(),
+          })
+          .from(schema.things)
+          .where(inArray(schema.things.discovererDid, playerDids))
+          .groupBy(schema.things.discovererDid),
+      ]);
+
+      for (const r of heldCounts) heldMap.set(r.did, Number(r.value));
+      for (const r of discCounts) discoveredMap.set(r.did, Number(r.value));
+    } catch {
+      // Keep zero counts on offline fallback
+    }
+  }
+
+  return allEntries
+    .map((u) => ({
+      did: u.did,
+      handle: u.handle,
+      displayName: u.displayName,
+      avatarUrl: u.avatarUrl,
+      isRegisteredPlayer: u.isRegisteredPlayer,
+      heldCount: heldMap.get(u.did) ?? 0,
+      discoveredCount: discoveredMap.get(u.did) ?? 0,
+      viewerFollows: viewerFollowSet.has(u.did),
+    }))
+    .sort((a, b) => {
+      if (a.isRegisteredPlayer !== b.isRegisteredPlayer) {
+        return a.isRegisteredPlayer ? -1 : 1;
+      }
+      if (b.heldCount !== a.heldCount) {
+        return b.heldCount - a.heldCount;
+      }
+      return a.handle.localeCompare(b.handle);
+    });
 }
 
 function mapThingRowToCard(

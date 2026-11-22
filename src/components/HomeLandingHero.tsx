@@ -1,15 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import {
   Activity,
   ExternalLink,
   Gift,
-  Grid2x2,
   Megaphone,
-  Pause,
-  Play,
+  Search,
   Send,
   Sparkles,
   Star,
@@ -158,8 +156,6 @@ export function HomeLandingHero({
   authenticated,
   viewerHandle,
 }: HomeLandingHeroProps) {
-  const [paused, setPaused] = useState(false);
-
   return (
     <div className="space-y-8">
       {/* Hero Showcase with Floating Animated 16-Bit Gift Boxes */}
@@ -167,25 +163,6 @@ export function HomeLandingHero({
         aria-label="Welcome to Give a Thing"
         className="rpg-panel relative overflow-hidden px-5 py-12 sm:px-10 sm:py-16"
       >
-        {/* Pause/Play Motion Control (WCAG 2.2.2 — label toggles without aria-pressed) */}
-        <button
-          type="button"
-          onClick={() => setPaused((p) => !p)}
-          className="rpg-btn-secondary absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2.5 py-1 font-pixel text-[10px] text-[#cfc3e8]"
-        >
-          {paused ? (
-            <>
-              <Play className="h-3 w-3 text-[#4da6ff]" aria-hidden="true" />
-              Play Boxes
-            </>
-          ) : (
-            <>
-              <Pause className="h-3 w-3 text-[#ffd15c]" aria-hidden="true" />
-              Pause Boxes
-            </>
-          )}
-        </button>
-
         {/* Floating Pixel Gift Boxes Field */}
         <div
           aria-hidden="true"
@@ -204,9 +181,7 @@ export function HomeLandingHero({
               }
               className={`floating-gift pointer-events-auto absolute opacity-90 ${
                 b.drift
-              } ${paused ? "is-paused" : ""} ${
-                b.hideOnMobile ? "hidden md:block" : ""
-              }`}
+              } ${b.hideOnMobile ? "hidden md:block" : ""}`}
             >
               <PixelGiftBoxSvg
                 palette={GIFT_PALETTES[b.palette]}
@@ -264,12 +239,12 @@ export function HomeLandingHero({
               href={
                 authenticated && viewerHandle
                   ? `/u/${encodeURIComponent(viewerHandle)}`
-                  : "/catalog"
+                  : "/search"
               }
               className="rpg-btn-primary inline-flex items-center gap-2 px-5 py-3.5 font-pixel text-xs sm:text-sm"
             >
-              <Grid2x2 className="h-4 w-4" aria-hidden="true" />
-              {authenticated ? "MY THINGS" : "ALL THE THINGS"}
+              <Search className="h-4 w-4" aria-hidden="true" />
+              {authenticated ? "MY THINGS" : "FIND THINGS"}
             </Link>
           </div>
         </div>
@@ -295,7 +270,7 @@ export function HomeLandingHero({
               One Brand-New Thing Per Day
             </h3>
             <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8]">
-              Sign in with Bluesky and head to{" "}
+              Log in with your ATmosphere Account and head to{" "}
               <Link href="/get" className="text-[#ff99ac] underline">
                 GET A THING
               </Link>{" "}
@@ -339,9 +314,9 @@ export function HomeLandingHero({
               <Link href="/happened" className="text-[#8ec8ff] underline">
                 THINGS THAT HAPPENED
               </Link>
-              , and browse{" "}
-              <Link href="/catalog" className="text-[#4be3a0] underline">
-                ALL THE THINGS
+              , and search{" "}
+              <Link href="/search" className="text-[#4be3a0] underline">
+                FIND THINGS
               </Link>
               .
             </p>

@@ -137,13 +137,15 @@ export function ClaimOfferClient({
           });
           const data = (await res.json()) as { url?: string; error?: string };
           if (!res.ok || !data.url) {
-            setError(data.error ?? "Could not start Bluesky sign-in.");
+            setError(
+              data.error ?? "Could not start ATmosphere Account login."
+            );
             setBusy(false);
             return;
           }
           window.location.href = data.url;
         } catch {
-          setError("Network error starting Bluesky sign-in.");
+          setError("Network error starting ATmosphere Account login.");
           setBusy(false);
         }
       }}
@@ -153,7 +155,7 @@ export function ClaimOfferClient({
         htmlFor={handleInputId}
         className="block font-pixel text-xs text-[#ffd15c] text-center"
       >
-        Sign in as @{recipientHandle} to Claim
+        Log in with ATmosphere Account @{recipientHandle} to Claim
       </label>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input

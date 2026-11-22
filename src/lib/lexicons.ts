@@ -353,7 +353,7 @@ export function buildAtmosphereDefineRecord(params: {
         role: "interop",
         authority: params.repoDid,
         label: "Discovered Things Catalog",
-        acquire: `${cleanUrl}/catalog`,
+        acquire: `${cleanUrl}/search`,
         purpose:
           "Immutable genesis records in @giveathing.com's PDS for every unique, never-duplicated thing pulled by players, with its 16-bit sprite blob and pointless trait.",
         verify: {
@@ -376,7 +376,7 @@ export function buildAtmosphereDefineRecord(params: {
         role: "activity",
         authority: params.repoDid,
         label: "Permanent Ownership Ledger",
-        acquire: `${cleanUrl}/catalog`,
+        acquire: `${cleanUrl}/search`,
         purpose:
           "Append-only provenance chain recording the original discoverer and every subsequent owner and 140-character gift note for each thing.",
       },

@@ -6,10 +6,7 @@ import {
   getNextUtcMidnightIso,
   isUnlimitedPullAccount,
 } from "@/lib/generator/pull-service";
-import {
-  DailyParcelPedestal,
-  type TodaysThingView,
-} from "@/components/DailyParcelPedestal";
+import { DailyParcelPedestal } from "@/components/DailyParcelPedestal";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +22,6 @@ export default async function GetAThingPage() {
   let hasPulled = false;
   let unlimitedPulls = session ? isUnlimitedPullAccount(session) : false;
   let nextPullUtcIso = getNextUtcMidnightIso();
-  let todaysThing: TodaysThingView | null = null;
 
   try {
     const pullStatus = await getDailyPullStatus(
@@ -35,7 +31,6 @@ export default async function GetAThingPage() {
     hasPulled = pullStatus.hasPulledToday;
     unlimitedPulls = pullStatus.unlimitedPulls;
     nextPullUtcIso = pullStatus.nextPullUtcIso;
-    todaysThing = pullStatus.todaysThing;
   } catch {
     // Graceful fallback when DATABASE_URL is not yet connected locally
   }
@@ -47,7 +42,6 @@ export default async function GetAThingPage() {
         initialHasPulled={hasPulled}
         initialUnlimitedPulls={unlimitedPulls}
         initialNextPullUtcIso={nextPullUtcIso}
-        initialTodaysThing={todaysThing}
       />
     </div>
   );

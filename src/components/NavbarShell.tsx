@@ -1,18 +1,21 @@
 "use client";
 
-import React, { useId, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   Backpack,
   Gift,
-  Grid2x2,
+  Hammer,
   Home,
   LogOut,
+  ScrollText,
+  Search,
   Sparkles,
 } from "lucide-react";
 import { RpgModal } from "./RpgModal";
+import { AtmosphereLoginForm } from "./AtmosphereLoginForm";
 
 export interface NavViewer {
   did: string;
@@ -30,10 +33,6 @@ export function NavbarShell({ viewer, children }: NavbarShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [loginOpen, setLoginOpen] = useState(false);
-  const [handleInput, setHandleInput] = useState("");
-  const [loginBusy, setLoginBusy] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const handleInputId = useId();
 
   const myThingsHref = viewer
     ? `/u/${encodeURIComponent(viewer.handle)}`
@@ -59,7 +58,7 @@ export function NavbarShell({ viewer, children }: NavbarShellProps) {
     {
       href: "/get",
       label: "GET A THING",
-      mobileLabel: "Get Thing",
+      mobileLabel: "Get",
       icon: Gift,
       active: pathname.startsWith("/get"),
       accent: "text-[#ff859d]",
@@ -81,41 +80,30 @@ export function NavbarShell({ viewer, children }: NavbarShellProps) {
       accent: "text-[#ffd15c]",
     },
     {
-      href: "/catalog",
-      label: "ALL THE THINGS",
-      mobileLabel: "All Things",
-      icon: Grid2x2,
-      active: pathname.startsWith("/catalog"),
+      href: "/make",
+      label: "MAKE THINGS",
+      mobileLabel: "Make",
+      icon: Hammer,
+      active: pathname.startsWith("/make"),
+      accent: "text-[#c49bff]",
+    },
+    {
+      href: "/search",
+      label: "FIND THINGS",
+      mobileLabel: "Find",
+      icon: Search,
+      active: pathname.startsWith("/search") || pathname.startsWith("/catalog"),
       accent: "text-[#4be3a0]",
     },
+    {
+      href: "/other",
+      label: "OTHER THINGS",
+      mobileLabel: "Other",
+      icon: ScrollText,
+      active: pathname.startsWith("/other"),
+      accent: "text-[#ffd15c]",
+    },
   ];
-
-  async function handleLoginSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!handleInput.trim()) return;
-    setLoginBusy(true);
-    setLoginError(null);
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          handle: handleInput.trim(),
-          returnTo: pathname || "/",
-        }),
-      });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
-        setLoginError(data.error ?? "Unable to start Bluesky sign-in.");
-        setLoginBusy(false);
-        return;
-      }
-      window.location.href = data.url;
-    } catch {
-      setLoginError("Network error starting Bluesky sign-in.");
-      setLoginBusy(false);
-    }
-  }
 
   async function handleLogout() {
     await fetch("/api/auth/me", { method: "DELETE" });
@@ -187,18 +175,18 @@ export function NavbarShell({ viewer, children }: NavbarShellProps) {
                 <button
                   type="button"
                   onClick={() => setLoginOpen(true)}
-                  className="rpg-btn-blue inline-flex items-center gap-2 px-3.5 py-2 font-pixel text-xs"
+                  className="rpg-btn-blue inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
                 >
-                  Sign in with Bluesky
+                  LOGIN
                 </button>
               )}
             </div>
           </div>
 
-          {/* Desktop 5-Item Primary Navigation */}
+          {/* Desktop 7-Item Primary Navigation */}
           <nav
             aria-label="Primary"
-            className="hidden items-center gap-2 border-t border-[#9e762a]/35 pt-2 lg:flex"
+            className="hidden items-center gap-1.5 border-t border-[#9e762a]/35 pt-2 lg:flex lg:flex-wrap"
           >
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -207,7 +195,7 @@ export function NavbarShell({ viewer, children }: NavbarShellProps) {
                   key={item.label}
                   href={item.href}
                   aria-current={item.active ? "page" : undefined}
-                  className={`inline-flex items-center gap-2 rounded px-3 py-2 text-[11px] font-pixel transition-colors ${
+                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-2 text-[10px] xl:px-3 xl:text-[11px] font-pixel transition-colors ${
                     item.active
                       ? "bg-[#3c2b60] text-[#ffd15c] border-2 border-[#ffd15c] shadow-[inset_0_-3px_0_0_#ff4d6d]"
                       : "border-2 border-transparent text-[#cfc3e8] hover:border-[#4da6ff]/50 hover:bg-[#2f214c] hover:text-[#fdf6e9]"
@@ -245,18 +233,16 @@ export function NavbarShell({ viewer, children }: NavbarShellProps) {
             >
               @giveathing.com
             </a>
-            <span className="text-[#ff99ac]">&bull;</span>
-            <span className="text-[#ffd15c]">Resets daily at 00:00 UTC</span>
           </p>
         </div>
       </footer>
 
-      {/* Mobile Thumb-Friendly 5-Item Bottom RPG Bar */}
+      {/* Mobile Thumb-Friendly 7-Item Bottom RPG Bar */}
       <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-[#f2c14e] bg-[#211636] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-[#f2c14e] bg-[#211636] pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] lg:hidden"
       >
-        <div className="grid grid-cols-5 gap-0.5 px-1.5 py-1">
+        <div className="grid grid-cols-7 gap-0.5 px-1 pt-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -264,13 +250,13 @@ export function NavbarShell({ viewer, children }: NavbarShellProps) {
                 key={item.label}
                 href={item.href}
                 aria-current={item.active ? "page" : undefined}
-                className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded px-1 py-1 text-center text-[9px] font-pixel leading-tight ${
+                className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded px-0.5 py-1 text-center text-[8px] font-pixel leading-tight ${
                   item.active
                     ? "bg-[#3c2b60] text-[#ffd15c] border-t-2 border-[#ff4d6d]"
                     : "text-[#cfc3e8]"
                 }`}
               >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <span className="truncate max-w-full">{item.mobileLabel}</span>
               </Link>
             );
@@ -278,71 +264,16 @@ export function NavbarShell({ viewer, children }: NavbarShellProps) {
         </div>
       </nav>
 
-      {/* Sign in with Bluesky RPG Modal */}
+      {/* Login with ATmosphere Account RPG Modal */}
       <RpgModal
         open={loginOpen}
         onClose={() => setLoginOpen(false)}
-        title="Sign in with Bluesky"
+        title="Login"
       >
-        <form onSubmit={handleLoginSubmit} className="space-y-4">
-          <p className="text-sm text-[#cfc3e8]">
-            Enter your Bluesky handle to unwrap daily things, curate your Top 8,
-            and give things away to your friends!
-          </p>
-
-          <div>
-            <label
-              htmlFor={handleInputId}
-              className="mb-1.5 block font-pixel text-xs text-[#ffd15c]"
-            >
-              Your Bluesky Handle
-            </label>
-            <input
-              id={handleInputId}
-              type="text"
-              autoFocus
-              required
-              autoComplete="username"
-              placeholder="alice.bsky.social"
-              value={handleInput}
-              onChange={(e) => setHandleInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  if (e.nativeEvent.isComposing || e.keyCode === 229) {
-                    e.preventDefault();
-                  }
-                }
-              }}
-              className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
-            />
-          </div>
-
-          {loginError && (
-            <p
-              role="alert"
-              className="rounded border border-[#ff4d6d] bg-[#ff4d6d]/15 px-3 py-2 text-xs text-[#ff99ac]"
-            >
-              {loginError}
-            </p>
-          )}
-
-          <div className="flex justify-end gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => setLoginOpen(false)}
-              className="rpg-btn-secondary px-4 py-2 font-pixel text-xs"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loginBusy}
-              className="rpg-btn-blue px-4 py-2 font-pixel text-xs"
-            >
-              {loginBusy ? "Connecting..." : "Continue to Bluesky"}
-            </button>
-          </div>
-        </form>
+        <AtmosphereLoginForm
+          returnTo={pathname || "/"}
+          onCancel={() => setLoginOpen(false)}
+        />
       </RpgModal>
     </div>
   );

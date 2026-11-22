@@ -2,7 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { Backpack, Gift, Users } from "lucide-react";
+import { Backpack, Gift, Search } from "lucide-react";
 import { getCurrentSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "My Things",
   description:
-    "Sign in with Bluesky to view your pointless things, feature your Top 8, and find your friends.",
+    "Log in with your ATmosphere Account to view your pointless things, feature your Top 8, and find your friends.",
 };
 
 export default async function MyBagPage() {
@@ -30,9 +30,13 @@ export default async function MyBagPage() {
       </h1>
 
       <p className="mx-auto max-w-md text-sm leading-relaxed text-[#cfc3e8]">
-        Click <strong>Sign in with Bluesky</strong> in the top bar to see all
-        the pointless things you own, pin your favorite Top 8, check your
-        followers &amp; following, and find your Bluesky friends!
+        Click{" "}
+        <Link href="/login?returnTo=/bag" className="font-semibold text-[#8ec8ff] underline hover:text-[#ffd15c]">
+          LOGIN
+        </Link>{" "}
+        in the top bar with your ATmosphere Account to see all the pointless
+        things you own, pin your favorite Top 8, check your followers &amp;
+        following, and find your friends!
       </p>
 
       <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
@@ -44,11 +48,11 @@ export default async function MyBagPage() {
           GET A THING
         </Link>
         <Link
-          href="/catalog"
+          href="/search"
           className="rpg-btn-blue inline-flex items-center gap-2 px-5 py-2.5 font-pixel text-xs"
         >
-          <Users className="h-4 w-4" aria-hidden="true" />
-          ALL THE THINGS
+          <Search className="h-4 w-4" aria-hidden="true" />
+          FIND THINGS
         </Link>
       </div>
     </section>

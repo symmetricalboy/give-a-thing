@@ -325,14 +325,14 @@ export function UserProfileClient({
               the top of your profile.
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
               {topThings.map((item, idx) => (
                 <div
                   key={item.thingTid}
-                  className="rpg-slot flex flex-col justify-between p-3 border-[#ffd15c]/60"
+                  className="rpg-slot min-w-0 flex flex-col justify-between p-4 border-[#ffd15c]/60"
                 >
-                  <div>
-                    <div className="mb-2 flex items-center justify-between gap-1">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
                       <span className="rounded bg-[#ff4d6d] px-1.5 py-0.5 font-pixel text-[9px] text-[#24040b]">
                         #{idx + 1}
                       </span>
@@ -356,15 +356,15 @@ export function UserProfileClient({
 
                     <Link
                       href={`/thing/${item.thingTid}`}
-                      className="block text-center text-xs font-semibold leading-snug text-[#fdf6e9] hover:text-[#ffd15c] line-clamp-2"
+                      className="block text-center text-xs sm:text-sm font-semibold leading-snug text-[#fdf6e9] hover:text-[#ffd15c] break-words"
                     >
                       {item.name}
                     </Link>
                   </div>
 
                   {isSelf && (
-                    <div className="mt-3 flex items-center justify-between gap-1 border-t border-[#9e762a]/40 pt-2">
-                      <div className="flex items-center gap-1">
+                    <div className="mt-3.5 flex flex-wrap items-center justify-between gap-1.5 border-t border-[#9e762a]/40 pt-2.5 pb-1">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           disabled={idx === 0 || favBusyTid === item.thingTid}
@@ -392,7 +392,7 @@ export function UserProfileClient({
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           disabled={favBusyTid === item.thingTid}
@@ -412,7 +412,7 @@ export function UserProfileClient({
                             onClick={() => setGiveTarget(item)}
                             aria-label="Give away this thing"
                             title="Give away"
-                            className="rpg-btn-red inline-flex h-6 items-center px-1.5 font-pixel text-[9px]"
+                            className="rpg-btn-red inline-flex h-6 items-center px-2 font-pixel text-[9px]"
                           >
                             <Send className="h-2.5 w-2.5" aria-hidden="true" />
                           </button>

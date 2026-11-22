@@ -9,6 +9,7 @@ import {
   migrateLegacyLedgerRecordsOnAppPds,
   publishAtmosphereGameDefineOnAppPds,
 } from "@/lib/atproto/app-pds";
+import { healMissingCatalogGaps } from "@/lib/generator/pull-service";
 
 const globalForBg = globalThis as unknown as {
   bgStarted?: boolean;
@@ -59,7 +60,19 @@ export function startBackgroundServices(): void {
       });
   }
 
-  // 2. Start real-time ATProtocol Jetstream listener
+  // 2. Automatically detect & fill any skipped catalog numbers (such as #0011) shortly after boot and periodically
+  setTimeout(() => {
+    void healMissingCatalogGaps().catch((err) => {
+      console.warn("[catalog-heal] Startup check warning:", err);
+    });
+  }, 5_000);
+  setInterval(() => {
+    void healMissingCatalogGaps().catch((err) => {
+      console.warn("[catalog-heal] Periodic check warning:", err);
+    });
+  }, 10 * 60_000);
+
+  // 3. Start real-time ATProtocol Jetstream listener
   void startJetstreamLoop().catch((err) => {
     console.warn("[jetstream] Startup warning:", err);
   });

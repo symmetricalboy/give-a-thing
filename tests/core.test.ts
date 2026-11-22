@@ -29,11 +29,14 @@ import {
   sanitizeGiftNote,
 } from "../src/lib/trading/trade-service";
 import {
+  findInteriorMissingCatalogNumbers,
+  findLowestMissingCatalogNumber,
   getCurrentUtcDateString,
   getNextUtcMidnightIso,
   isUnlimitedPullAccount,
 } from "../src/lib/generator/pull-service";
 import { parseGeneratedThingConcept } from "../src/lib/generator/gemini";
+import { USER_GIVEATHING_COLLECTIONS } from "../src/lib/account/delete-account";
 import { NEWS_POSTS } from "../src/lib/news";
 
 function collectSourceFiles(dir: string): string[] {
@@ -397,7 +400,9 @@ describe("Give a Thing — Core Engine Verification", () => {
       'label: "GET A THING"',
       'label: "THINGS THAT HAPPENED"',
       'label: "MY THINGS"',
-      'label: "ALL THE THINGS"',
+      'label: "MAKE THINGS"',
+      'label: "FIND THINGS"',
+      'label: "OTHER THINGS"',
     ];
     let lastIndex = -1;
     for (const lbl of tabLabels) {
@@ -405,9 +410,79 @@ describe("Give a Thing — Core Engine Verification", () => {
       expect(idx, `Missing ${lbl} in NavbarShell`).toBeGreaterThan(lastIndex);
       lastIndex = idx;
     }
+    expect(navbarSrc).not.toContain('label: "ALL THE THINGS"');
+    expect(navbarSrc).not.toContain("Sign in with Bluesky");
+    expect(navbarSrc).toContain("LOGIN");
+    expect(navbarSrc).not.toContain("00:00 UTC");
     expect(navbarSrc).toContain(
       "Copyright (c) 2026 Dylan Gregori Singer (symmetricalboy)"
     );
+
+    const loginFormSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "AtmosphereLoginForm.tsx"),
+      "utf8"
+    );
+    expect(loginFormSrc).toContain("ATmosphere Account");
+    expect(loginFormSrc).toContain(
+      "Don&apos;t have an ATmosphere Account? Make one on Bluesky!"
+    );
+    expect(loginFormSrc).toContain("https://bsky.app");
+
+    const heroSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "HomeLandingHero.tsx"),
+      "utf8"
+    );
+    expect(heroSrc).not.toContain("Pause Boxes");
+    expect(heroSrc).not.toContain("Play Boxes");
+
+    const findSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "CatalogBrowser.tsx"),
+      "utf8"
+    );
+    expect(findSrc).toContain("FIND THINGS");
+    expect(findSrc).toContain("SEARCH THINGS");
+    expect(findSrc).toContain("SEARCH USERS");
+
+    const otherSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "OtherThingsClient.tsx"),
+      "utf8"
+    );
+    expect(otherSrc).toContain("PRIVACY POLICY");
+    expect(otherSrc).toContain("TERMS OF SERVICE");
+    expect(otherSrc).toContain("CODE OF CONDUCT");
+    expect(otherSrc).toContain("support@giveathing.com");
+    expect(otherSrc).toContain("https://bsky.app/profile/giveathing.com");
+    expect(otherSrc).toContain("DANGER ZONE");
+    expect(USER_GIVEATHING_COLLECTIONS.length).toBe(6);
+
+    const makePageSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "app", "make", "page.tsx"),
+      "utf8"
+    );
+    expect(makePageSrc).toContain("COMING SOON");
+    expect(makePageSrc).toContain("MAKE THINGS");
+    expect(makePageSrc.toLowerCase()).toContain("collections");
+    expect(makePageSrc.toLowerCase()).toContain("sell");
+
+    const pedestalSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "DailyParcelPedestal.tsx"),
+      "utf8"
+    );
+    expect(pedestalSrc).toContain(
+      "It could take up to about a minute to find the right thing for you. Please don't leave this page and hang tight!"
+    );
+    expect(pedestalSrc).not.toContain(
+      "A thing is being selected for you right now, and it could take up to about 1 minute to find the right thing. Hang tight!"
+    );
+    expect(pedestalSrc).toContain("/empty-box.svg");
+    expect(pedestalSrc.toLowerCase()).toContain("come back tomorrow");
+    expect(pedestalSrc).not.toContain("initialTodaysThing");
+
+    const cardSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "ThingGridCard.tsx"),
+      "utf8"
+    );
+    expect(cardSrc).not.toContain("item.description");
 
     const uiFiles = [
       ...collectSourceFiles(path.join(process.cwd(), "src", "components")),
@@ -431,5 +506,35 @@ describe("Give a Thing — Core Engine Verification", () => {
         "ATProtocol"
       );
     }
+  });
+
+  it("fills missing catalog numbers like #0011 before advancing and renders public/empty-box.svg cleanly", async () => {
+    expect(findLowestMissingCatalogNumber([])).toBe(1);
+    expect(findLowestMissingCatalogNumber([2, 3, 4])).toBe(1);
+    expect(findLowestMissingCatalogNumber([1, 2, 3])).toBe(4);
+
+    // Simulate production catalog #0001..#0019 with #0011 skipped
+    const catalogWithSkipped11 = [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19,
+    ];
+    expect(findInteriorMissingCatalogNumbers(catalogWithSkipped11)).toEqual([
+      11,
+    ]);
+    expect(findLowestMissingCatalogNumber(catalogWithSkipped11)).toBe(11);
+
+    // Once #0011 is filled, no interior gaps remain and next pull gets #0020
+    const healedCatalog = [...catalogWithSkipped11, 11];
+    expect(findInteriorMissingCatalogNumbers(healedCatalog)).toEqual([]);
+    expect(findLowestMissingCatalogNumber(healedCatalog)).toBe(20);
+
+    const emptyBoxPath = path.join(process.cwd(), "public", "empty-box.svg");
+    expect(fs.existsSync(emptyBoxPath)).toBe(true);
+    const renderedPng = await sharp(emptyBoxPath)
+      .resize(128, 128, { kernel: sharp.kernel.nearest })
+      .png()
+      .toBuffer();
+    const meta = await sharp(renderedPng).metadata();
+    expect(meta.width).toBe(128);
+    expect(meta.height).toBe(128);
   });
 });

@@ -23,14 +23,14 @@ export function ThingGridCard({
   const isFav = Boolean(item.favoriteSlot);
 
   return (
-    <article className="thing-card rpg-panel-subtle p-4 transition-colors hover:border-[#4da6ff]">
+    <article className="thing-card rpg-panel-subtle p-5 transition-colors hover:border-[#4da6ff]">
       {/* Row 1: Sprite Pedestal & Catalog Header */}
-      <div>
-        <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-1.5">
           <span className="font-pixel text-[11px] text-[#ffd15c]">
             #{String(item.catalogNumber).padStart(4, "0")}
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {isFav && (
               <span className="inline-flex items-center gap-1 rounded bg-[#ffd15c]/20 px-1.5 py-0.5 font-pixel text-[9px] text-[#ffd15c]">
                 <Star className="h-2.5 w-2.5 fill-current" aria-hidden="true" />
@@ -57,7 +57,7 @@ export function ThingGridCard({
 
         <Link
           href={`/thing/${item.thingTid}`}
-          className="rpg-slot mx-auto mb-3 flex h-28 w-28 items-center justify-center p-2 hover:border-[#ffd15c]"
+          className="rpg-slot mx-auto mb-3.5 flex h-28 w-28 items-center justify-center p-2 hover:border-[#ffd15c]"
         >
           <img
             src={item.iconUrl}
@@ -69,12 +69,12 @@ export function ThingGridCard({
         </Link>
       </div>
 
-      {/* Row 2: Title, Category & Description */}
-      <div className="space-y-1.5">
-        <p className="truncate text-[11px] font-medium text-[#8ec8ff]">
+      {/* Row 2: Category & Title */}
+      <div className="min-w-0 space-y-1.5">
+        <p className="text-[11px] font-medium leading-snug text-[#8ec8ff] break-words">
           {item.category}
         </p>
-        <h3 className="font-semibold text-sm leading-snug text-[#fdf6e9]">
+        <h3 className="font-semibold text-sm sm:text-base leading-snug text-[#fdf6e9] break-words">
           <Link
             href={`/thing/${item.thingTid}`}
             className="hover:text-[#ffd15c]"
@@ -82,21 +82,18 @@ export function ThingGridCard({
             {item.name}
           </Link>
         </h3>
-        <p className="text-xs text-[#cfc3e8] line-clamp-2">
-          {item.description}
-        </p>
       </div>
 
       {/* Row 3: Owner & Actions */}
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#9e762a]/35 pt-2.5 text-xs">
+      <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-[#9e762a]/35 pt-3 pb-1 text-xs">
         <Link
           href={`/u/${encodeURIComponent(item.currentOwner.handle)}`}
-          className="truncate text-[#cfc3e8] hover:text-[#ffd15c]"
+          className="min-w-0 max-w-full truncate text-[#cfc3e8] hover:text-[#ffd15c]"
         >
           @{item.currentOwner.handle}
         </Link>
 
-        <div className="flex items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
           {isViewerOwner && onToggleFavorite && (
             <button
               type="button"
@@ -106,7 +103,7 @@ export function ThingGridCard({
                 isFav ? "Remove from Top 8 things" : "Add to Top 8 things"
               }
               title={isFav ? "Remove from Top 8" : "Feature in Top 8"}
-              className={`rpg-btn-secondary inline-flex items-center gap-1 px-2 py-1 font-pixel text-[9px] ${
+              className={`rpg-btn-secondary inline-flex items-center gap-1 px-2.5 py-1 font-pixel text-[9px] ${
                 isFav ? "border-[#ffd15c] text-[#ffd15c]" : "text-[#cfc3e8]"
               }`}
             >

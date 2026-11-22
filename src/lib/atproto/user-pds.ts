@@ -1,6 +1,7 @@
 import { Agent } from "@atproto/api";
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/db";
+import { getAppPdsAgent } from "./app-pds";
 import { getOAuthClient } from "./oauth";
 import {
   LEXICON_NSIDS,
@@ -42,8 +43,13 @@ export async function putUserHoldingOnPds(
   params: PutUserHoldingParams,
   enqueueIfOffline = true
 ): Promise<StrongRef | null> {
-  const agent = await getUserAgent(params.ownerDid);
-  if (!agent) {
+  const userAgent = await getUserAgent(params.ownerDid);
+  const appAgent = !userAgent ? await getAppPdsAgent() : null;
+  const activeAgent =
+    userAgent ??
+    (appAgent?.session?.did === params.ownerDid ? appAgent : null);
+
+  if (!activeAgent) {
     if (enqueueIfOffline) {
       await enqueuePendingPdsSync(
         params.ownerDid,
@@ -69,13 +75,13 @@ export async function putUserHoldingOnPds(
   try {
     let iconBlob: unknown = undefined;
     if (params.iconPngBuffer) {
-      const upload = await agent.uploadBlob(params.iconPngBuffer, {
+      const upload = await activeAgent.uploadBlob(params.iconPngBuffer, {
         encoding: "image/png",
       });
       iconBlob = upload.data.blob;
     }
 
-    const res = await agent.com.atproto.repo.putRecord({
+    const res = await activeAgent.com.atproto.repo.putRecord({
       repo: params.ownerDid,
       collection: LEXICON_NSIDS.HOLDING,
       rkey: params.thingTid,

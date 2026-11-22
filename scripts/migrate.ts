@@ -205,6 +205,12 @@ async function main() {
         time_us TEXT NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      SELECT setval(
+        pg_get_serial_sequence('things', 'catalog_number'),
+        GREATEST(COALESCE((SELECT MAX(catalog_number) FROM things), 1), 1),
+        true
+      );
     `);
 
     console.log("[db:migrate] Schema applied successfully!");

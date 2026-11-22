@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <!-- Background -->
+  <rect width="32" height="32" fill="#140f1d"/>
+
+  <!-- Subtle 32x32 pixel circle backdrop -->
+  <rect x="11" y="3" width="10" height="26" fill="#1d152b"/>
+  <rect x="8" y="4" width="16" height="24" fill="#1d152b"/>
+  <rect x="6" y="6" width="20" height="20" fill="#1d152b"/>
+  <rect x="4" y="8" width="24" height="16" fill="#1d152b"/>
+  <rect x="3" y="11" width="26" height="10" fill="#1d152b"/>
+
+  <!-- Subtle empty dust motes floating above open box -->
+  <rect x="14" y="5" width="1" height="1" fill="#8ec8ff" fill-opacity="0.45"/>
+  <rect x="18" y="4" width="1" height="1" fill="#cfc3e8" fill-opacity="0.35"/>
+
+  <!-- Back Open Flap (tilted up, x: 10..21, y: 7..12) -->
+  <rect x="11" y="7" width="10" height="1" fill="#0b0711"/>
+  <rect x="10" y="8" width="1" height="4" fill="#0b0711"/>
+  <rect x="21" y="8" width="1" height="4" fill="#0b0711"/>
+  <rect x="11" y="8" width="10" height="1" fill="#f5c451"/>
+  <rect x="11" y="9" width="10" height="3" fill="#b37820"/>
+
+  <!-- Left Open Flap (angled outward, x: 4..9, y: 12..16) -->
+  <rect x="5" y="12" width="4" height="1" fill="#0b0711"/>
+  <rect x="4" y="13" width="1" height="3" fill="#0b0711"/>
+  <rect x="5" y="16" width="4" height="1" fill="#0b0711"/>
+  <rect x="9" y="12" width="1" height="5" fill="#0b0711"/>
+  <rect x="5" y="13" width="4" height="1" fill="#fff1c2"/>
+  <rect x="5" y="14" width="4" height="2" fill="#e8b24c"/>
+
+  <!-- Right Open Flap (angled outward, x: 22..27, y: 12..16) -->
+  <rect x="23" y="12" width="4" height="1" fill="#0b0711"/>
+  <rect x="27" y="13" width="1" height="3" fill="#0b0711"/>
+  <rect x="23" y="16" width="4" height="1" fill="#0b0711"/>
+  <rect x="22" y="12" width="1" height="5" fill="#0b0711"/>
+  <rect x="23" y="13" width="4" height="1" fill="#fff1c2"/>
+  <rect x="23" y="14" width="4" height="2" fill="#d99b32"/>
+
+  <!-- Hollow Dark Empty Interior (x: 10..21, y: 12..16) -->
+  <rect x="10" y="12" width="12" height="1" fill="#0b0711"/>
+  <rect x="10" y="13" width="12" height="2" fill="#26183b"/>
+  <rect x="10" y="15" width="12" height="2" fill="#130b1f"/>
+  <rect x="12" y="13" width="1" height="4" fill="#1b102c"/>
+  <rect x="19" y="13" width="1" height="4" fill="#1b102c"/>
+
+  <!-- Front Rim & Box Body Outline (x: 9..22, y: 17..25) -->
+  <rect x="9" y="17" width="14" height="1" fill="#0b0711"/>
+  <rect x="9" y="18" width="1" height="7" fill="#0b0711"/>
+  <rect x="22" y="18" width="1" height="7" fill="#0b0711"/>
+  <rect x="10" y="25" width="12" height="1" fill="#0b0711"/>
+
+  <!-- Box Front Body Fill -->
+  <rect x="10" y="18" width="12" height="1" fill="#f5c451"/>
+  <rect x="10" y="19" width="12" height="5" fill="#d99b32"/>
+  <rect x="10" y="19" width="2" height="5" fill="#e8b24c"/>
+  <rect x="20" y="19" width="2" height="5" fill="#b37820"/>
+  <rect x="10" y="24" width="12" height="1" fill="#9c6419"/>
+
+  <!-- Untied Pink Ribbon Hanging Loosely & Resting Beside Box -->
+  <rect x="14" y="18" width="3" height="7" fill="#e04372"/>
+  <rect x="15" y="18" width="1" height="6" fill="#ff5c8a"/>
+  <rect x="15" y="26" width="9" height="1" fill="#0b0711"/>
+  <rect x="15" y="25" width="4" height="1" fill="#e04372"/>
+  <rect x="19" y="25" width="5" height="1" fill="#ff5c8a"/>
+  <rect x="24" y="24" width="2" height="1" fill="#ff8fb1"/>
+</svg>

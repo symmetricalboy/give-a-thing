@@ -1,7 +1,10 @@
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { nextTid, type ProvenanceHop, type StrongRef } from "@/lib/lexicons";
-import { mintCanonicalThingOnAppPds } from "@/lib/atproto/app-pds";
+import {
+  getAppPdsAgent,
+  mintCanonicalThingOnAppPds,
+} from "@/lib/atproto/app-pds";
 import { putUserHoldingOnPds } from "@/lib/atproto/user-pds";
 import { storeSpriteAssets } from "@/lib/storage";
 import { broadcastFeedEvent } from "@/lib/feed/bus";
@@ -61,6 +64,51 @@ export function getNextUtcMidnightIso(now: Date = new Date()): string {
   return next.toISOString();
 }
 
+/**
+ * Returns the smallest positive integer (>= 1) not present in `existingNumbers`.
+ * Ensures any skipped/missing catalog numbers (such as #0011) are filled before
+ * advancing past the maximum catalog number.
+ */
+export function findLowestMissingCatalogNumber(
+  existingNumbers: Iterable<number>
+): number {
+  const seen = new Set<number>();
+  for (const n of existingNumbers) {
+    if (Number.isInteger(n) && n >= 1) {
+      seen.add(n);
+    }
+  }
+  let candidate = 1;
+  while (seen.has(candidate)) {
+    candidate++;
+  }
+  return candidate;
+}
+
+/**
+ * Returns all missing positive catalog numbers strictly below `max(existingNumbers)`.
+ * For example, `[1..10, 12..19]` yields `[11]`.
+ */
+export function findInteriorMissingCatalogNumbers(
+  existingNumbers: Iterable<number>
+): number[] {
+  const seen = new Set<number>();
+  let max = 0;
+  for (const n of existingNumbers) {
+    if (Number.isInteger(n) && n >= 1) {
+      seen.add(n);
+      if (n > max) max = n;
+    }
+  }
+  const missing: number[] = [];
+  for (let i = 1; i < max; i++) {
+    if (!seen.has(i)) {
+      missing.push(i);
+    }
+  }
+  return missing;
+}
+
 export class DailyPullAlreadyUsedError extends Error {
   public readonly thingTid: string;
   constructor(thingTid: string) {
@@ -105,10 +153,12 @@ export interface PullResultPayload {
  *    and writes `com.giveathing.holding` to the discoverer's own PDS.
  */
 export async function executeDailyPull(
-  userDid: string
+  userDid: string,
+  options?: { bypassLock?: boolean }
 ): Promise<PullResultPayload> {
   const db = getDb();
   const pullUtcDate = getCurrentUtcDateString();
+  const bypassLock = Boolean(options?.bypassLock);
 
   const userRows = await db
     .select()
@@ -140,64 +190,52 @@ export async function executeDailyPull(
   }
 
   // Acquire concurrency lock so double-clicks don't trigger parallel Gemini calls
-  const existingLock = await db
-    .select()
-    .from(schema.dailyPullLocks)
-    .where(
-      and(
-        eq(schema.dailyPullLocks.did, userDid),
-        eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate)
-      )
-    )
-    .limit(1);
-
-  if (existingLock[0]) {
-    if (
-      !unlimited &&
-      existingLock[0].status === "completed" &&
-      existingLock[0].thingTid
-    ) {
-      throw new DailyPullAlreadyUsedError(existingLock[0].thingTid);
-    }
-    if (existingLock[0].status === "in_progress") {
-      const ageMs = Date.now() - existingLock[0].lockedAt.getTime();
-      if (ageMs < 90_000) {
-        throw new DailyPullInProgressError();
-      }
-    }
-    await db
-      .update(schema.dailyPullLocks)
-      .set({ lockedAt: new Date(), status: "in_progress" })
+  if (!bypassLock) {
+    const existingLock = await db
+      .select()
+      .from(schema.dailyPullLocks)
       .where(
         and(
           eq(schema.dailyPullLocks.did, userDid),
           eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate)
         )
-      );
-  } else {
-    await db.insert(schema.dailyPullLocks).values({
-      did: userDid,
-      pullUtcDate,
-      status: "in_progress",
-      lockedAt: new Date(),
-    });
+      )
+      .limit(1);
+
+    if (existingLock[0]) {
+      if (
+        !unlimited &&
+        existingLock[0].status === "completed" &&
+        existingLock[0].thingTid
+      ) {
+        throw new DailyPullAlreadyUsedError(existingLock[0].thingTid);
+      }
+      if (existingLock[0].status === "in_progress") {
+        const ageMs = Date.now() - existingLock[0].lockedAt.getTime();
+        if (ageMs < 90_000) {
+          throw new DailyPullInProgressError();
+        }
+      }
+      await db
+        .update(schema.dailyPullLocks)
+        .set({ lockedAt: new Date(), status: "in_progress" })
+        .where(
+          and(
+            eq(schema.dailyPullLocks.did, userDid),
+            eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate)
+          )
+        );
+    } else {
+      await db.insert(schema.dailyPullLocks).values({
+        did: userDid,
+        pullUtcDate,
+        status: "in_progress",
+        lockedAt: new Date(),
+      });
+    }
   }
 
   try {
-    let pullSlot = 1;
-    if (unlimited) {
-      const todayCountRes = await db
-        .select({ value: count() })
-        .from(schema.things)
-        .where(
-          and(
-            eq(schema.things.discovererDid, userDid),
-            eq(schema.things.pullUtcDate, pullUtcDate)
-          )
-        );
-      pullSlot = Number(todayCountRes[0]?.value ?? 0) + 1;
-    }
-
     // Load subcategory usage counts for inverse-frequency sampling
     const statRows = await db.select().from(schema.subcategoryStats);
     const usageMap = new Map<string, number>();
@@ -288,33 +326,71 @@ export async function executeDailyPull(
     );
     const spritePngBase64 = sprite64Png.toString("base64");
 
-    // Step 1: Insert row into Postgres first so `bigserial` assigns sequential `catalogNumber`
-    const insertedRows = await db
-      .insert(schema.things)
-      .values({
-        thingTid,
-        name: chosenConcept.name,
-        canonicalFingerprint: chosenFingerprint,
-        category: seed.macroLabel,
-        subcategory: seed.subcategory,
-        description: chosenConcept.description,
-        flavorText: chosenConcept.flavorText,
-        uselessTrait: chosenConcept.uselessTrait,
-        iconAlt: chosenConcept.iconAlt,
-        embedding: chosenEmbedding,
-        iconUrl,
-        spritePngBase64,
-        discovererDid: userDid,
-        pullUtcDate,
-        pullSlot,
-        currentOwnerDid: userDid,
-        status: "held",
-        transferCount: 0,
-        createdAt,
-      })
-      .returning();
+    // Step 1: Atomically allocate the lowest unused `catalog_number` (filling any gap such as #0011)
+    // and insert into Postgres inside an advisory-locked transaction so failed attempts never leave holes.
+    const inserted = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(717341101)`);
 
-    const inserted = insertedRows[0]!;
+      const existingNumbers = await tx
+        .select({ catalogNumber: schema.things.catalogNumber })
+        .from(schema.things);
+      const assignedCatalogNumber = findLowestMissingCatalogNumber(
+        existingNumbers.map((r) => r.catalogNumber)
+      );
+
+      let pullSlot = 1;
+      if (unlimited) {
+        const slotRows = await tx
+          .select({
+            maxSlot: sql<number>`COALESCE(MAX(${schema.things.pullSlot}), 0)`,
+          })
+          .from(schema.things)
+          .where(
+            and(
+              eq(schema.things.discovererDid, userDid),
+              eq(schema.things.pullUtcDate, pullUtcDate)
+            )
+          );
+        pullSlot = Number(slotRows[0]?.maxSlot ?? 0) + 1;
+      }
+
+      const insertedRows = await tx
+        .insert(schema.things)
+        .values({
+          thingTid,
+          catalogNumber: assignedCatalogNumber,
+          name: chosenConcept.name,
+          canonicalFingerprint: chosenFingerprint,
+          category: seed.macroLabel,
+          subcategory: seed.subcategory,
+          description: chosenConcept.description,
+          flavorText: chosenConcept.flavorText,
+          uselessTrait: chosenConcept.uselessTrait,
+          iconAlt: chosenConcept.iconAlt,
+          embedding: chosenEmbedding,
+          iconUrl,
+          spritePngBase64,
+          discovererDid: userDid,
+          pullUtcDate,
+          pullSlot,
+          currentOwnerDid: userDid,
+          status: "held",
+          transferCount: 0,
+          createdAt,
+        })
+        .returning();
+
+      await tx.execute(sql`
+        SELECT setval(
+          pg_get_serial_sequence('things', 'catalog_number'),
+          GREATEST(COALESCE((SELECT MAX(catalog_number) FROM things), 1), 1),
+          true
+        )
+      `);
+
+      return insertedRows[0]!;
+    });
+
     const catalogNumber = inserted.catalogNumber;
 
     // Update subcategory usage counter
@@ -435,25 +511,27 @@ export async function executeDailyPull(
       })
       .returning();
 
-    if (unlimited) {
-      await db
-        .delete(schema.dailyPullLocks)
-        .where(
-          and(
-            eq(schema.dailyPullLocks.did, userDid),
-            eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate)
-          )
-        );
-    } else {
-      await db
-        .update(schema.dailyPullLocks)
-        .set({ status: "completed", thingTid })
-        .where(
-          and(
-            eq(schema.dailyPullLocks.did, userDid),
-            eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate)
-          )
-        );
+    if (!bypassLock) {
+      if (unlimited) {
+        await db
+          .delete(schema.dailyPullLocks)
+          .where(
+            and(
+              eq(schema.dailyPullLocks.did, userDid),
+              eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate)
+            )
+          );
+      } else {
+        await db
+          .update(schema.dailyPullLocks)
+          .set({ status: "completed", thingTid })
+          .where(
+            and(
+              eq(schema.dailyPullLocks.did, userDid),
+              eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate)
+            )
+          );
+      }
     }
 
     if (feedRow) {
@@ -485,15 +563,170 @@ export async function executeDailyPull(
       unlimitedPulls: unlimited,
     };
   } catch (err) {
-    await db
-      .delete(schema.dailyPullLocks)
+    if (!bypassLock) {
+      await db
+        .delete(schema.dailyPullLocks)
+        .where(
+          and(
+            eq(schema.dailyPullLocks.did, userDid),
+            eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate),
+            eq(schema.dailyPullLocks.status, "in_progress")
+          )
+        );
+    }
+    throw err;
+  }
+}
+
+let catalogHealInFlight = false;
+
+/**
+ * Checks for any skipped interior catalog numbers `< MAX(catalog_number)` (such as #0011)
+ * and automatically generates missing Things via `@giveathing.com` so the catalog stays contiguous.
+ */
+export async function healMissingCatalogGaps(maxToFill = 5): Promise<number[]> {
+  if (catalogHealInFlight) return [];
+  if (!process.env.DATABASE_URL || !process.env.GEMINI_API_KEY) return [];
+
+  catalogHealInFlight = true;
+  const filled: number[] = [];
+  const HEAL_LOCK_DID = "__catalog_heal__";
+  const HEAL_LOCK_DATE = "global";
+  let acquiredDbLock = false;
+
+  try {
+    const db = getDb();
+    const initialRows = await db
+      .select({ catalogNumber: schema.things.catalogNumber })
+      .from(schema.things);
+    const initialMissing = findInteriorMissingCatalogNumbers(
+      initialRows.map((r) => r.catalogNumber)
+    );
+    if (initialMissing.length === 0) {
+      return [];
+    }
+
+    // Cross-process lease so rolling deploys never double-heal the same gap
+    const [existingHealLock] = await db
+      .select()
+      .from(schema.dailyPullLocks)
       .where(
         and(
-          eq(schema.dailyPullLocks.did, userDid),
-          eq(schema.dailyPullLocks.pullUtcDate, pullUtcDate),
-          eq(schema.dailyPullLocks.status, "in_progress")
+          eq(schema.dailyPullLocks.did, HEAL_LOCK_DID),
+          eq(schema.dailyPullLocks.pullUtcDate, HEAL_LOCK_DATE)
         )
+      )
+      .limit(1);
+
+    if (
+      existingHealLock &&
+      existingHealLock.status === "in_progress" &&
+      Date.now() - existingHealLock.lockedAt.getTime() < 180_000
+    ) {
+      return [];
+    }
+
+    await db
+      .insert(schema.dailyPullLocks)
+      .values({
+        did: HEAL_LOCK_DID,
+        pullUtcDate: HEAL_LOCK_DATE,
+        status: "in_progress",
+        lockedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.dailyPullLocks.did,
+          schema.dailyPullLocks.pullUtcDate,
+        ],
+        set: { status: "in_progress", lockedAt: new Date() },
+      });
+    acquiredDbLock = true;
+
+    // Resolve the official @giveathing.com account to own/discover backfilled gaps
+    let [appUser] = await db
+      .select()
+      .from(schema.users)
+      .where(sql`lower(${schema.users.handle}) = ${UNLIMITED_PULL_HANDLE}`)
+      .limit(1);
+
+    if (!appUser) {
+      const configuredDid = process.env.NEXT_PUBLIC_APP_ATPROTO_DID?.trim();
+      if (configuredDid && !configuredDid.includes("replace_with")) {
+        const [byDid] = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.did, configuredDid))
+          .limit(1);
+        appUser = byDid;
+      }
+    }
+
+    if (!appUser) {
+      const appAgent = await getAppPdsAgent();
+      if (appAgent?.session?.did) {
+        const insertedUsers = await db
+          .insert(schema.users)
+          .values({
+            did: appAgent.session.did,
+            handle: appAgent.session.handle || UNLIMITED_PULL_HANDLE,
+            displayName: "Give a Thing",
+          })
+          .onConflictDoUpdate({
+            target: schema.users.did,
+            set: { updatedAt: new Date() },
+          })
+          .returning();
+        appUser = insertedUsers[0];
+      }
+    }
+
+    if (!appUser) {
+      console.warn(
+        `[catalog-heal] Found missing catalog number(s) [${initialMissing.join(", ")}], but @giveathing.com user record is not yet present.`
       );
-    throw err;
+      return [];
+    }
+
+    const limit = Math.min(initialMissing.length, maxToFill);
+    for (let i = 0; i < limit; i++) {
+      const currentRows = await db
+        .select({ catalogNumber: schema.things.catalogNumber })
+        .from(schema.things);
+      const stillMissing = findInteriorMissingCatalogNumbers(
+        currentRows.map((r) => r.catalogNumber)
+      );
+      if (stillMissing.length === 0) {
+        break;
+      }
+
+      console.log(
+        `[catalog-heal] Filling skipped catalog number #${String(stillMissing[0]).padStart(4, "0")}...`
+      );
+      const minted = await executeDailyPull(appUser.did, { bypassLock: true });
+      filled.push(minted.catalogNumber);
+      console.log(
+        `[catalog-heal] Filled #${String(minted.catalogNumber).padStart(4, "0")}: ${minted.name}`
+      );
+    }
+
+    return filled;
+  } finally {
+    if (acquiredDbLock) {
+      try {
+        const db = getDb();
+        await db
+          .delete(schema.dailyPullLocks)
+          .where(
+            and(
+              eq(schema.dailyPullLocks.did, HEAL_LOCK_DID),
+              eq(schema.dailyPullLocks.pullUtcDate, HEAL_LOCK_DATE)
+            )
+          );
+      } catch {
+        // Ignore cleanup error
+      }
+    }
+    catalogHealInFlight = false;
   }
 }
