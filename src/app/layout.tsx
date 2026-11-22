@@ -25,14 +25,12 @@ export const metadata: Metadata = {
     default: "Give a Thing",
     template: "%s | Give a Thing",
   },
-  description:
-    "One unique pointless 16-bit thing every UTC day—keep yours or give it to a friend for no reason.",
+  description: "Get a Pointless Thing Every Day & Give Things Away",
   openGraph: {
     type: "website",
     siteName: "Give a Thing",
     title: "Give a Thing",
-    description:
-      "One unique pointless 16-bit thing every UTC day—keep yours or give it to a friend for no reason.",
+    description: "Get a Pointless Thing Every Day & Give Things Away",
     url: "https://giveathing.com",
     images: [
       {
@@ -46,8 +44,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Give a Thing",
-    description:
-      "One unique pointless 16-bit thing every UTC day—keep yours or give it to a friend for no reason.",
+    description: "Get a Pointless Thing Every Day & Give Things Away",
     images: ["/cover.png"],
   },
   icons: {

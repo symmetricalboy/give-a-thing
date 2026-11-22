@@ -260,7 +260,6 @@ export function buildAtmosphereDefineRecord(params: {
   appUrl: string;
   iconBlob?: unknown;
   coverBlob?: unknown;
-  mediaItems?: AtmosphereMediaItem[];
   createdAtIso?: string;
   releasedAtIso?: string;
   updatedAtIso?: string;
@@ -273,8 +272,7 @@ export function buildAtmosphereDefineRecord(params: {
   return {
     $type: LEXICON_NSIDS.ATMOSPHERE_DEFINE,
     name: "Give a Thing",
-    tagline:
-      "One unique pointless 16-bit thing every UTC day—keep yours or give it to a friend for no reason.",
+    tagline: "Get a Pointless Thing Every Day & Give Things Away",
     description:
       "Give a Thing is a cozy, slightly absurd social collection game built natively on ATProtocol. Every day at 00:00 UTC, every player can unwrap a mystery parcel to discover one completely pointless, one-of-a-kind thing—ranging from fantasy weapons and 90s memorabilia to everyday household oddities, famous artworks, food, and bottled abstract thoughts—paired with a custom 16-bit RPG inventory sprite. Every pull checks the full history of discovered things so duplicates are never generated. Things have zero combat stats and zero monetary value: the entire joy is trading them. Give any of your things to any friend at any time for no reason at all, etch an optional 140-character gift note into its permanent ownership ledger, or pass the same favorite thing back and forth dozens of times. Sending a thing to a Bluesky friend who hasn't joined yet places it in 24-hour claimable escrow with a shareable Bluesky mention card. Canonical thing definitions and append-only provenance ledgers live permanently on ATProtocol, while active holdings, Profile Top 8 featured showcases, signed transfer receipts, and friend follows are stored in each player's own Personal Data Server (PDS). Give a Thing is currently in Alpha—expect active iteration, new categories, UI refinements, and occasional rough edges as the global catalog grows.",
     url: cleanUrl,
@@ -299,15 +297,17 @@ export function buildAtmosphereDefineRecord(params: {
     ],
     ...(params.coverBlob ? { cover: params.coverBlob } : {}),
     ...(params.iconBlob ? { icon: params.iconBlob } : {}),
-    ...(params.mediaItems && params.mediaItems.length > 0
-      ? { media: params.mediaItems }
-      : {}),
     developer: {
-      name: "Give a Thing",
-      did: params.repoDid,
-      url: "https://bsky.app/profile/giveathing.com",
+      name: "symmetricalboy.com",
+      did: "did:plc:33d7gnwiagm6cimpiepefp72",
+      url: "https://symmetricalboy.com",
     },
-    claimAllowed: [params.repoDid, "giveathing.com"],
+    claimAllowed: [
+      "did:plc:33d7gnwiagm6cimpiepefp72",
+      "symmetricalboy.com",
+      params.repoDid,
+      "giveathing.com",
+    ],
     uses: [
       {
         nsid: LEXICON_NSIDS.HOLDING,

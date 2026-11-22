@@ -180,27 +180,23 @@ describe("Give a Thing — Core Engine Verification", () => {
       appUrl: "https://giveathing.com",
       iconBlob: { $type: "blob", mimeType: "image/png", size: 1537 },
       coverBlob: { $type: "blob", mimeType: "image/png", size: 410000 },
-      mediaItems: [
-        {
-          type: "screenshot",
-          image: { $type: "blob", mimeType: "image/png", size: 500000 },
-          alt: "Daily mystery parcel unwrapping",
-          width: 1600,
-          height: 900,
-        },
-      ],
     });
     const parsedAtmosphere =
       AtmosphereDefineRecordSchema.parse(atmosphereRecord);
     expect(parsedAtmosphere.$type).toBe("games.atmosphere.define");
     expect(parsedAtmosphere.name).toBe("Give a Thing");
-    expect(parsedAtmosphere.tagline).toBeTruthy();
-    expect(parsedAtmosphere.tagline).not.toContain("Give a Thing");
+    expect(parsedAtmosphere.tagline).toBe(
+      "Get a Pointless Thing Every Day & Give Things Away"
+    );
     expect(parsedAtmosphere.status).toBe("alpha");
     expect(parsedAtmosphere.publisher).toBe("at://did:plc:giveathingapp");
+    expect(parsedAtmosphere.developer?.name).toBe("symmetricalboy.com");
+    expect(parsedAtmosphere.developer?.did).toBe(
+      "did:plc:33d7gnwiagm6cimpiepefp72"
+    );
     expect(parsedAtmosphere.category).toBe("browser");
     expect(parsedAtmosphere.cover).toBeDefined();
-    expect(parsedAtmosphere.media?.length).toBe(1);
+    expect(parsedAtmosphere.media).toBeUndefined();
     expect(parsedAtmosphere.uses?.length).toBe(9);
     expect(parsedAtmosphere.tags).toContain("cozy");
     expect(parsedAtmosphere.tags).toContain("alpha");

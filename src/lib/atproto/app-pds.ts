@@ -5,7 +5,6 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import {
   ATMOSPHERE_GAME_RKEY,
-  type AtmosphereMediaItem,
   buildAtmosphereDefineRecord,
   LEXICON_NSIDS,
   type ProvenanceVia,
@@ -300,50 +299,11 @@ export async function publishAtmosphereGameDefineOnAppPds(): Promise<StrongRef |
     coverBlob = uploaded.data.blob;
   }
 
-  const gallerySpecs: Array<{ file: string; alt: string }> = [
-    {
-      file: "slide-1-daily-pull.png",
-      alt: "Unwrapping a daily UTC midnight mystery parcel on Give a Thing to reveal a unique 16-bit inventory sprite.",
-    },
-    {
-      file: "slide-2-top8-showcase.png",
-      alt: "Player profile Top 8 featured things showcase above rows of discovered 16-bit inventory slots.",
-    },
-    {
-      file: "slide-3-friend-trading.png",
-      alt: "Trading pointless 16-bit things between friends with gift notes and a permanent ATProtocol ownership ledger.",
-    },
-  ];
-
-  const mediaItems: AtmosphereMediaItem[] = [];
-  for (const spec of gallerySpecs) {
-    const slidePath = path.join(
-      process.cwd(),
-      "public",
-      "atmosphere",
-      spec.file
-    );
-    if (fs.existsSync(slidePath)) {
-      const slideBytes = fs.readFileSync(slidePath);
-      const uploaded = await agent.uploadBlob(slideBytes, {
-        encoding: "image/png",
-      });
-      mediaItems.push({
-        type: "screenshot",
-        image: uploaded.data.blob,
-        alt: spec.alt,
-        width: 1600,
-        height: 900,
-      });
-    }
-  }
-
   const record = buildAtmosphereDefineRecord({
     repoDid: repo,
     appUrl: publicUrl,
     iconBlob,
     coverBlob,
-    mediaItems,
     createdAtIso: existingCreatedAt,
     releasedAtIso: existingReleasedAt,
   });
