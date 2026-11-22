@@ -1,0 +1,61 @@
+{
+  "lexicon": 1,
+  "id": "com.giveathing.ledgerEntry",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Immutable canonical provenance hop recorded in the official Give a Thing repository (@giveathing.com) whenever a Thing is pulled, gifted, or claimed.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["thing", "sequenceNum", "owner", "via", "occurredAt"],
+        "properties": {
+          "thing": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong reference to the canonical com.giveathing.thing record."
+          },
+          "prevEntry": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong reference to the previous ledgerEntry in this Thing's provenance chain."
+          },
+          "sequenceNum": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 for initial discovery pull, incrementing by 1 on every transfer."
+          },
+          "owner": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the recipient/holder at this step."
+          },
+          "previousOwner": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the sender (omitted on sequenceNum 0)."
+          },
+          "via": {
+            "type": "string",
+            "knownValues": ["daily_pull", "direct_gift", "escrow_claim"]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 420,
+            "maxGraphemes": 140,
+            "description": "Optional permanent gift note attached by the sender."
+          },
+          "userProof": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong reference to the sender's com.giveathing.transfer or recipient's com.giveathing.claim record."
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

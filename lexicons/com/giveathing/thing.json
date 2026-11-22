@@ -1,0 +1,94 @@
+{
+  "lexicon": 1,
+  "id": "com.giveathing.thing",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Immutable genesis record of a pointless thing discovered on Give a Thing. Stored exclusively in the official Give a Thing repository (@giveathing.com).",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "catalogNumber",
+          "name",
+          "category",
+          "subcategory",
+          "description",
+          "flavorText",
+          "icon",
+          "iconAlt",
+          "discoveredBy",
+          "pullDate",
+          "createdAt"
+        ],
+        "properties": {
+          "catalogNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Sequential global discovery catalog number (#1, #2, ...)."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 240,
+            "maxGraphemes": 120,
+            "description": "Unique name of the pointless thing."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Macro-category of the thing."
+          },
+          "subcategory": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Specific subcategory seed."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1200,
+            "maxGraphemes": 500,
+            "description": "Evocative inspection description of the object."
+          },
+          "flavorText": {
+            "type": "string",
+            "maxLength": 600,
+            "maxGraphemes": 280,
+            "description": "Short comedic RPG flavor quote or observation."
+          },
+          "uselessTrait": {
+            "type": "string",
+            "maxLength": 160,
+            "maxGraphemes": 80,
+            "description": "A completely pointless RPG stat or quirk (e.g., '+0 Aerodynamics')."
+          },
+          "icon": {
+            "type": "blob",
+            "accept": ["image/png"],
+            "maxSize": 1000000,
+            "description": "16-bit pixel-art inventory icon sprite PNG."
+          },
+          "iconAlt": {
+            "type": "string",
+            "maxLength": 600,
+            "maxGraphemes": 300,
+            "description": "Accessible alt text describing the 16-bit sprite."
+          },
+          "discoveredBy": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the player who discovered this thing via daily pull."
+          },
+          "pullDate": {
+            "type": "string",
+            "maxLength": 10,
+            "description": "UTC date (YYYY-MM-DD) when this thing was pulled."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

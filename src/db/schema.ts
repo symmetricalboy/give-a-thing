@@ -1,0 +1,318 @@
+import {
+  bigserial,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+  vector,
+} from "drizzle-orm/pg-core";
+
+export const users = pgTable(
+  "users",
+  {
+    did: text("did").primaryKey(),
+    handle: text("handle").notNull(),
+    displayName: text("display_name"),
+    avatarUrl: text("avatar_url"),
+    pdsUrl: text("pds_url"),
+    autoImportBskyFollows: boolean("auto_import_bsky_follows")
+      .notNull()
+      .default(false),
+    lastBskySyncAt: timestamp("last_bsky_sync_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("users_handle_idx").on(table.handle)]
+);
+
+export const things = pgTable(
+  "things",
+  {
+    thingTid: text("thing_tid").primaryKey(),
+    catalogNumber: bigserial("catalog_number", { mode: "number" })
+      .notNull()
+      .unique(),
+    name: text("name").notNull(),
+    canonicalFingerprint: text("canonical_fingerprint").notNull().unique(),
+    category: text("category").notNull(),
+    subcategory: text("subcategory").notNull(),
+    description: text("description").notNull(),
+    flavorText: text("flavor_text").notNull(),
+    uselessTrait: text("useless_trait").notNull(),
+    iconAlt: text("icon_alt").notNull(),
+    embedding: vector("embedding", { dimensions: 768 }).notNull(),
+    iconBlobCid: text("icon_blob_cid"),
+    iconUrl: text("icon_url").notNull(),
+    spritePngBase64: text("sprite_png_base64"),
+    discovererDid: text("discoverer_did")
+      .notNull()
+      .references(() => users.did),
+    pullUtcDate: varchar("pull_utc_date", { length: 10 }).notNull(),
+    pullSlot: integer("pull_slot").notNull().default(1),
+    currentOwnerDid: text("current_owner_did")
+      .notNull()
+      .references(() => users.did),
+    status: varchar("status", { length: 20 }).notNull().default("held"),
+    transferCount: integer("transfer_count").notNull().default(0),
+    canonicalAtUri: text("canonical_at_uri"),
+    canonicalAtCid: text("canonical_at_cid"),
+    latestLedgerAtUri: text("latest_ledger_at_uri"),
+    latestLedgerAtCid: text("latest_ledger_at_cid"),
+    currentHoldingAtUri: text("current_holding_at_uri"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("things_discoverer_utc_date_slot_idx").on(
+      table.discovererDid,
+      table.pullUtcDate,
+      table.pullSlot
+    ),
+    index("things_embedding_hnsw_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops")
+    ),
+    index("things_owner_idx").on(table.currentOwnerDid),
+    index("things_category_idx").on(table.category),
+    index("things_transfer_count_idx").on(table.transferCount),
+    index("things_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export const userFavoriteThings = pgTable(
+  "user_favorite_things",
+  {
+    userDid: text("user_did")
+      .notNull()
+      .references(() => users.did, { onDelete: "cascade" }),
+    thingTid: text("thing_tid")
+      .notNull()
+      .references(() => things.thingTid, { onDelete: "cascade" }),
+    slot: integer("slot").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userDid, table.thingTid] }),
+    index("user_fav_slot_idx").on(table.userDid, table.slot),
+  ]
+);
+
+export const dailyPullLocks = pgTable(
+  "daily_pull_locks",
+  {
+    did: text("did").notNull(),
+    pullUtcDate: varchar("pull_utc_date", { length: 10 }).notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("in_progress"),
+    thingTid: text("thing_tid"),
+    lockedAt: timestamp("locked_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.did, table.pullUtcDate] })]
+);
+
+export const provenanceEntries = pgTable(
+  "provenance_entries",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    entryTid: text("entry_tid").notNull().unique(),
+    thingTid: text("thing_tid")
+      .notNull()
+      .references(() => things.thingTid, { onDelete: "cascade" }),
+    sequenceNum: integer("sequence_num").notNull(),
+    fromDid: text("from_did"),
+    fromHandleSnapshot: text("from_handle_snapshot"),
+    toDid: text("to_did").notNull(),
+    toHandleSnapshot: text("to_handle_snapshot").notNull(),
+    via: varchar("via", { length: 24 }).notNull(),
+    note: varchar("note", { length: 140 }),
+    ledgerAtUri: text("ledger_at_uri"),
+    ledgerAtCid: text("ledger_at_cid"),
+    userProofAtUri: text("user_proof_at_uri"),
+    userProofAtCid: text("user_proof_at_cid"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("provenance_thing_seq_idx").on(
+      table.thingTid,
+      table.sequenceNum
+    ),
+    index("provenance_thing_idx").on(table.thingTid),
+  ]
+);
+
+export const escrowOffers = pgTable(
+  "escrow_offers",
+  {
+    offerTid: text("offer_tid").primaryKey(),
+    thingTid: text("thing_tid")
+      .notNull()
+      .references(() => things.thingTid),
+    senderDid: text("sender_did")
+      .notNull()
+      .references(() => users.did),
+    recipientDid: text("recipient_did").notNull(),
+    recipientHandleSnapshot: text("recipient_handle_snapshot").notNull(),
+    recipientDisplayName: text("recipient_display_name"),
+    recipientAvatarUrl: text("recipient_avatar_url"),
+    note: varchar("note", { length: 140 }),
+    status: varchar("status", { length: 20 }).notNull().default("open"),
+    offerAtUri: text("offer_at_uri"),
+    offerAtCid: text("offer_at_cid"),
+    claimAtUri: text("claim_at_uri"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    revocableAfter: timestamp("revocable_after", {
+      withTimezone: true,
+    }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("escrow_sender_idx").on(table.senderDid),
+    index("escrow_recipient_idx").on(table.recipientDid),
+    index("escrow_thing_idx").on(table.thingTid),
+  ]
+);
+
+export const follows = pgTable(
+  "follows",
+  {
+    followerDid: text("follower_did")
+      .notNull()
+      .references(() => users.did, { onDelete: "cascade" }),
+    subjectDid: text("subject_did")
+      .notNull()
+      .references(() => users.did, { onDelete: "cascade" }),
+    followTid: text("follow_tid").notNull(),
+    source: varchar("source", { length: 24 }).notNull().default("manual"),
+    atUri: text("at_uri"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.followerDid, table.subjectDid] }),
+    index("follows_subject_idx").on(table.subjectDid),
+  ]
+);
+
+export const bskyKnownFollows = pgTable(
+  "bsky_known_follows",
+  {
+    followerDid: text("follower_did")
+      .notNull()
+      .references(() => users.did, { onDelete: "cascade" }),
+    targetDid: text("target_did").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.followerDid, table.targetDid] }),
+    index("bsky_known_target_idx").on(table.targetDid),
+  ]
+);
+
+export const feedEvents = pgTable(
+  "feed_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    eventType: varchar("event_type", { length: 24 }).notNull(),
+    actorDid: text("actor_did")
+      .notNull()
+      .references(() => users.did),
+    targetDid: text("target_did").references(() => users.did),
+    thingTid: text("thing_tid")
+      .notNull()
+      .references(() => things.thingTid),
+    sequenceNum: integer("sequence_num").notNull().default(0),
+    note: varchar("note", { length: 140 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("feed_events_created_idx").on(table.createdAt),
+    index("feed_events_actor_idx").on(table.actorDid),
+    index("feed_events_target_idx").on(table.targetDid),
+  ]
+);
+
+export const oauthStates = pgTable("oauth_states", {
+  key: text("key").primaryKey(),
+  stateJson: text("state_json").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+export const oauthSessions = pgTable("oauth_sessions", {
+  did: text("did").primaryKey(),
+  sessionJson: text("session_json").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const appPdsSession = pgTable("app_pds_session", {
+  id: text("id").primaryKey(),
+  did: text("did").notNull(),
+  sessionJson: text("session_json").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const pendingPdsSyncs = pgTable(
+  "pending_pds_syncs",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    targetDid: text("target_did").notNull(),
+    action: varchar("action", { length: 32 }).notNull(),
+    thingTid: text("thing_tid"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("pending_pds_target_idx").on(table.targetDid)]
+);
+
+export const subcategoryStats = pgTable("subcategory_stats", {
+  subcategoryKey: text("subcategory_key").primaryKey(),
+  macroCategory: text("macro_category").notNull(),
+  subcategory: text("subcategory").notNull(),
+  pullCount: integer("pull_count").notNull().default(0),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+});
+
+export const jetstreamCursor = pgTable("jetstream_cursor", {
+  id: text("id").primaryKey(),
+  timeUs: text("time_us").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type UserRow = typeof users.$inferSelect;
+export type ThingRow = typeof things.$inferSelect;
+export type ProvenanceEntryRow = typeof provenanceEntries.$inferSelect;
+export type EscrowOfferRow = typeof escrowOffers.$inferSelect;
+export type FeedEventRow = typeof feedEvents.$inferSelect;

@@ -1,0 +1,105 @@
+{
+  "lexicon": 1,
+  "id": "com.giveathing.holding",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Represents active possession of a thing in a player's own PDS repository (including the original discoverer). Deleted when given away.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "thing",
+          "catalogNumber",
+          "name",
+          "category",
+          "description",
+          "status",
+          "acquiredAt",
+          "provenance"
+        ],
+        "properties": {
+          "thing": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong reference to the canonical com.giveathing.thing record in @giveathing.com."
+          },
+          "catalogNumber": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 240
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1200
+          },
+          "icon": {
+            "type": "blob",
+            "accept": ["image/png"],
+            "maxSize": 1000000,
+            "description": "Self-hosted copy of the 16-bit pixel icon PNG in the current owner's PDS."
+          },
+          "status": {
+            "type": "string",
+            "knownValues": ["held", "escrowed"]
+          },
+          "favoriteSlot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "description": "Optional Top 8 featured slot (1..8) on the owner's profile."
+          },
+          "acquiredAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "provenance": {
+            "type": "array",
+            "items": {
+              "type": "ref",
+              "ref": "#provenanceHop"
+            }
+          }
+        }
+      }
+    },
+    "provenanceHop": {
+      "type": "object",
+      "required": ["sequenceNum", "owner", "via", "occurredAt"],
+      "properties": {
+        "sequenceNum": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "owner": {
+          "type": "string",
+          "format": "did"
+        },
+        "handleSnapshot": {
+          "type": "string",
+          "maxLength": 253
+        },
+        "via": {
+          "type": "string",
+          "knownValues": ["daily_pull", "direct_gift", "escrow_claim"]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 420,
+          "maxGraphemes": 140
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "datetime"
+        }
+      }
+    }
+  }
+}

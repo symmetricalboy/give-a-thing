@@ -1,0 +1,49 @@
+{
+  "name": "give-a-thing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Give a Thing — A daily pointless ATProtocol social game powered by Gemini 4 Carbon",
+  "scripts": {
+    "dev": "next dev -H 127.0.0.1 -p 3000",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:push": "drizzle-kit push",
+    "worker": "tsx scripts/worker.ts",
+    "icons:generate": "node scripts/generate-icons.mjs",
+    "atproto:register-game": "tsx scripts/register-atmosphere-game.ts"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.19.6",
+    "@atproto/common-web": "^0.4.6",
+    "@atproto/oauth-client-node": "^0.5.19",
+    "@atproto/syntax": "^0.4.3",
+    "@aws-sdk/client-s3": "^3.930.0",
+    "@google/genai": "^3.6.1",
+    "drizzle-orm": "^0.45.4",
+    "jose": "^6.1.0",
+    "lucide-react": "^1.0.0",
+    "next": "^16.4.6",
+    "postgres": "^3.4.8",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "sharp": "^0.34.5",
+    "ws": "^8.18.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.16",
+    "@types/node": "^24.9.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.31.6",
+    "tailwindcss": "^4.1.16",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.5"
+  }
+}

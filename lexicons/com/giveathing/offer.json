@@ -1,0 +1,38 @@
+{
+  "lexicon": 1,
+  "id": "com.giveathing.offer",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Escrow offer stored in the sender's PDS when setting a Thing aside for a Bluesky user who has not joined Give a Thing yet. Revocable if unclaimed after revocableAfter (24h).",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["thing", "recipientDid", "createdAt", "revocableAfter"],
+        "properties": {
+          "thing": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef"
+          },
+          "recipientDid": {
+            "type": "string",
+            "format": "did"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 420,
+            "maxGraphemes": 140
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "revocableAfter": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

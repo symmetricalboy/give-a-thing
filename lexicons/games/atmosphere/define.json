@@ -1,0 +1,92 @@
+{
+  "lexicon": 1,
+  "id": "games.atmosphere.define",
+  "description": "Official ATmosphere Games portable game definition schema for directory indexing at atmosphere.games.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "any",
+      "description": "One game definition per record, published in the developer's own repo. Keep the same rkey to update it in place.",
+      "record": {
+        "type": "object",
+        "required": ["name", "url", "publisher", "category", "createdAt"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 100 },
+          "tagline": { "type": "string", "maxLength": 200 },
+          "description": { "type": "string", "maxLength": 2000 },
+          "url": { "type": "string", "format": "uri" },
+          "publisher": { "type": "string", "format": "at-uri" },
+          "category": {
+            "type": "string",
+            "maxLength": 30,
+            "knownValues": ["browser", "download", "physical", "other"]
+          },
+          "status": {
+            "type": "string",
+            "knownValues": ["live", "beta", "coming", "archived"]
+          },
+          "tags": {
+            "type": "array",
+            "maxLength": 12,
+            "items": { "type": "string", "maxLength": 32 }
+          },
+          "icon": {
+            "type": "blob",
+            "accept": ["image/png", "image/webp"],
+            "maxSize": 512000
+          },
+          "cover": {
+            "type": "blob",
+            "accept": ["image/png", "image/jpeg", "image/webp"],
+            "maxSize": 4000000
+          },
+          "developer": { "type": "ref", "ref": "#party" },
+          "uses": {
+            "type": "array",
+            "maxLength": 32,
+            "items": { "type": "ref", "ref": "#recordUse" }
+          },
+          "createdAt": { "type": "string", "format": "datetime" },
+          "updatedAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "party": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "did": { "type": "string", "format": "did" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "recordUse": {
+      "type": "object",
+      "required": ["role", "nsid"],
+      "properties": {
+        "nsid": { "type": "string", "format": "nsid" },
+        "rkey": { "type": "string", "maxLength": 50 },
+        "role": {
+          "type": "string",
+          "knownValues": [
+            "character",
+            "perk",
+            "cosmetic",
+            "interop",
+            "stats",
+            "activity",
+            "leaderboard",
+            "profile",
+            "session",
+            "inventory",
+            "other"
+          ]
+        },
+        "label": { "type": "string", "maxLength": 120 },
+        "acquire": { "type": "string", "format": "uri" },
+        "purpose": { "type": "string", "maxLength": 300 },
+        "authority": { "type": "string", "format": "did" }
+      }
+    }
+  }
+}

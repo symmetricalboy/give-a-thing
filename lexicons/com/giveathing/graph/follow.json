@@ -1,0 +1,29 @@
+{
+  "lexicon": 1,
+  "id": "com.giveathing.graph.follow",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Portable social follow edge on Give a Thing, stored in the follower's PDS.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["subject", "source", "createdAt"],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "format": "did"
+          },
+          "source": {
+            "type": "string",
+            "knownValues": ["manual", "bsky_import", "bsky_auto"]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

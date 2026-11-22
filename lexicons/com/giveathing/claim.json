@@ -1,0 +1,29 @@
+{
+  "lexicon": 1,
+  "id": "com.giveathing.claim",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Claim receipt stored in the recipient's PDS when claiming an escrowed Thing offer.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["offer", "thing", "claimedAt"],
+        "properties": {
+          "offer": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef"
+          },
+          "thing": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef"
+          },
+          "claimedAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}
