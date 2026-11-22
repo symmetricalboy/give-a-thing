@@ -23,6 +23,10 @@ import {
   isOfferRevocableNow,
 } from "@/lib/trading/trade-service";
 import { getPublicAppUrl } from "@/lib/atproto/oauth";
+import {
+  fetchRichBlueskyProfile,
+  type BlueskyProfileLink,
+} from "@/lib/atproto/public-bsky";
 
 export interface PublicUserBrief {
   did: string;
@@ -30,6 +34,12 @@ export interface PublicUserBrief {
   displayName: string | null;
   avatarUrl: string | null;
 }
+
+export interface ProfileSocialUser extends PublicUserBrief {
+  viewerFollows: boolean;
+}
+
+export type { BlueskyProfileLink };
 
 export interface ThingCardItem {
   thingTid: string;
@@ -544,7 +554,10 @@ export async function getPlayerProfile(
     discoveredCountRes,
     givenCountRes,
     openEscrowRows,
-    followCheck,
+    playerFollowingRows,
+    playerFollowerRows,
+    viewerFollowingRows,
+    bskyProfile,
   ] = await Promise.all([
     db
       .select()
@@ -574,24 +587,45 @@ export async function getPlayerProfile(
         )
       )
       .orderBy(desc(schema.escrowOffers.createdAt)),
-    viewerDid && viewerDid !== player.did
+    db
+      .select({ subjectDid: schema.follows.subjectDid })
+      .from(schema.follows)
+      .where(eq(schema.follows.followerDid, player.did))
+      .orderBy(desc(schema.follows.createdAt)),
+    db
+      .select({ followerDid: schema.follows.followerDid })
+      .from(schema.follows)
+      .where(eq(schema.follows.subjectDid, player.did))
+      .orderBy(desc(schema.follows.createdAt)),
+    viewerDid
       ? db
-          .select()
+          .select({ subjectDid: schema.follows.subjectDid })
           .from(schema.follows)
-          .where(
-            and(
-              eq(schema.follows.followerDid, viewerDid),
-              eq(schema.follows.subjectDid, player.did)
-            )
-          )
-          .limit(1)
+          .where(eq(schema.follows.followerDid, viewerDid))
       : Promise.resolve([]),
+    fetchRichBlueskyProfile(player.did),
   ]);
+
+  const followingDids = playerFollowingRows.map((r) => r.subjectDid);
+  const followerDids = playerFollowerRows.map((r) => r.followerDid);
+  const viewerFollowSet = new Set(viewerFollowingRows.map((r) => r.subjectDid));
 
   const userMap = await fetchUsersMap([
     player.did,
     ...heldRows.map((t) => t.discovererDid),
+    ...followingDids,
+    ...followerDids,
   ]);
+
+  const followingList: ProfileSocialUser[] = followingDids.map((did) => ({
+    ...(userMap.get(did) ?? fallbackBrief(did)),
+    viewerFollows: viewerFollowSet.has(did),
+  }));
+
+  const followersList: ProfileSocialUser[] = followerDids.map((did) => ({
+    ...(userMap.get(did) ?? fallbackBrief(did)),
+    viewerFollows: viewerFollowSet.has(did),
+  }));
 
   const appUrl = getPublicAppUrl();
   const heldByTid = new Map(heldRows.map((h) => [h.thingTid, h]));
@@ -613,20 +647,33 @@ export async function getPlayerProfile(
     })
     .filter((x): x is ThingCardItem & { favoriteSlot: number } => Boolean(x));
 
+  const effectiveHandle = bskyProfile?.handle ?? player.handle;
+
   return {
     player: {
       did: player.did,
-      handle: player.handle,
-      displayName: player.displayName,
-      avatarUrl: player.avatarUrl,
+      handle: effectiveHandle,
+      displayName: bskyProfile?.displayName ?? player.displayName,
+      avatarUrl: bskyProfile?.avatar ?? player.avatarUrl,
+      bannerUrl: bskyProfile?.banner ?? null,
+      pronouns: bskyProfile?.pronouns ?? null,
+      bio: bskyProfile?.bio ?? null,
+      links: bskyProfile?.links ?? [],
+      bskyProfileUrl:
+        bskyProfile?.bskyProfileUrl ??
+        `https://bsky.app/profile/${encodeURIComponent(effectiveHandle)}`,
       createdAtIso: player.createdAt.toISOString(),
     },
     stats: {
       heldCount: heldRows.length,
       discoveredCount: Number(discoveredCountRes[0]?.value ?? 0),
       givenAwayCount: Number(givenCountRes[0]?.value ?? 0),
+      followingCount: followingList.length,
+      followersCount: followersList.length,
     },
-    isFollowing: followCheck.length > 0,
+    isFollowing: viewerFollowSet.has(player.did),
+    followingList,
+    followersList,
     topThings,
     inventory,
     outgoingEscrows: openEscrowRows.map((o) => {

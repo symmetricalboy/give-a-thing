@@ -76,14 +76,14 @@ export function ThingInspectorActions({
 
   if (status === "escrowed" && activeEscrow) {
     return (
-      <div className="space-y-3 rounded border-2 border-[#5cc8ff] bg-[#5cc8ff]/10 p-4">
+      <div className="space-y-3 rounded border-2 border-[#4da6ff] bg-[#4da6ff]/10 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-pixel text-xs text-[#5cc8ff]">
+          <p className="font-pixel text-xs text-[#8ec8ff]">
             Set Aside for @{activeEscrow.recipientHandle}
           </p>
           {!canRevoke && (
-            <span className="text-xs text-[#fbf4e4]">
-              Revocable in{" "}
+            <span className="text-xs text-[#fdf6e9]">
+              Returnable in{" "}
               <strong className="font-pixel">
                 {formatRemainingWindow(activeEscrow.revocableAfterIso, nowMs)}
               </strong>
@@ -96,7 +96,7 @@ export function ThingInspectorActions({
             href={activeEscrow.composerIntentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="rpg-btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-[11px]"
+            className="rpg-btn-blue inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-[11px]"
           >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             Mention on Bluesky
@@ -130,22 +130,22 @@ export function ThingInspectorActions({
             onClick={handleRevoke}
             title={
               canRevoke
-                ? "Reclaim this Thing to your active bag"
+                ? "Return this thing to your active collection"
                 : "Available after 24 hours if unclaimed"
             }
-            className="rpg-btn-secondary inline-flex items-center gap-1.5 border-[#ff5c8a]/60 px-3 py-2 font-pixel text-[11px] text-[#ff9bb6]"
+            className="rpg-btn-secondary inline-flex items-center gap-1.5 border-[#ff4d6d]/60 px-3 py-2 font-pixel text-[11px] text-[#ff99ac]"
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
             {revoking
-              ? "Revoking..."
+              ? "Returning..."
               : canRevoke
-                ? "Revoke Offer"
-                : "Revoke Locked (24h)"}
+                ? "Return Thing"
+                : "Locked (24h)"}
           </button>
         </div>
 
         {revokeErr && (
-          <p role="alert" className="text-xs text-[#ff9bb6]">
+          <p role="alert" className="text-xs text-[#ff99ac]">
             {revokeErr}
           </p>
         )}
@@ -158,7 +158,7 @@ export function ThingInspectorActions({
       <button
         type="button"
         onClick={() => setGiveOpen(true)}
-        className="rpg-btn-primary inline-flex items-center gap-2 px-5 py-3 font-pixel text-xs"
+        className="rpg-btn-red inline-flex items-center gap-2 px-5 py-3 font-pixel text-xs"
       >
         <Send className="h-4 w-4" aria-hidden="true" />
         Give This Thing Away

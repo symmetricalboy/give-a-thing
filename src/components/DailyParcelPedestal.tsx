@@ -114,12 +114,12 @@ export function DailyParcelPedestal({
   const countdownText = formatUtcCountdown(nextPullIso, nowMs);
 
   return (
-    <section aria-label="Daily Mystery Pull" className="rpg-panel p-5 sm:p-7">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#8c6826]/50 pb-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-[#f5c451]" aria-hidden="true" />
-          <h1 className="font-pixel text-xs sm:text-sm text-[#f5c451]">
-            GET TODAY&apos;S THING
+    <section aria-label="Get a Thing" className="rpg-panel p-5 sm:p-8">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#9e762a]/50 pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Sparkles className="h-4 w-4 text-[#ff4d6d]" aria-hidden="true" />
+          <h1 className="font-pixel text-xs sm:text-sm text-[#ffd15c]">
+            GET A THING
           </h1>
           {unlimitedPulls && (
             <span className="rounded bg-[#4be3a0]/20 px-2 py-0.5 font-pixel text-[9px] text-[#4be3a0]">
@@ -127,42 +127,42 @@ export function DailyParcelPedestal({
             </span>
           )}
         </div>
-        <div className="inline-flex items-center gap-1.5 rounded bg-[#140f1d] px-2.5 py-1 text-xs text-[#bfb2d6] border border-[#8c6826]/50">
-          <Clock className="h-3.5 w-3.5 text-[#e5b54f]" aria-hidden="true" />
+        <div className="inline-flex items-center gap-1.5 rounded bg-[#160f24] px-2.5 py-1 text-xs text-[#cfc3e8] border border-[#4da6ff]/50">
+          <Clock className="h-3.5 w-3.5 text-[#8ec8ff]" aria-hidden="true" />
           <span>UTC Reset in</span>
-          <span className="font-pixel text-[#fbf4e4]">{countdownText}</span>
+          <span className="font-pixel text-[#fdf6e9]">{countdownText}</span>
         </div>
       </div>
 
       {!todaysThing ? (
-        <div className="flex flex-col items-center py-4 text-center">
-          <div className="rpg-slot mb-5 flex h-32 w-32 items-center justify-center p-3">
+        <div className="flex flex-col items-center py-6 text-center">
+          <div className="rpg-slot mb-5 flex h-36 w-36 items-center justify-center p-3 border-[#ff4d6d]/60">
             <img
               src="/icon.svg"
               alt="16-bit wrapped mystery parcel"
-              width={104}
-              height={104}
-              className={`pixel-art h-26 w-26 ${
+              width={108}
+              height={108}
+              className={`pixel-art h-27 w-27 ${
                 pulling ? "animate-parcel-wobble" : "animate-float-gentle"
               }`}
             />
           </div>
 
-          <h2 className="font-pixel text-base sm:text-lg text-[#fbf4e4] mb-2">
+          <h2 className="font-pixel text-base sm:text-lg text-[#fdf6e9] mb-2">
             {pulling
-              ? "Conjuring a One-of-a-Kind Thing..."
+              ? "Selecting a Thing Just for You..."
               : "Today's Pointless Thing Awaits!"}
           </h2>
-          <p className="max-w-lg text-sm text-[#bfb2d6] mb-5">
+          <p className="max-w-lg text-sm leading-relaxed text-[#cfc3e8] mb-6">
             {pulling
-              ? "Gemini 4 Carbon is checking the entire historical catalog to guarantee zero duplicates and painting your 16-bit sprite..."
-              : "Every UTC day, click once to get a completely unique, utterly useless thing—recorded permanently on ATProtocol so you can keep it or give it to a friend."}
+              ? "A thing is being selected for you right now, and it could take up to about 1 minute to find the right thing. Hang tight!"
+              : "Every UTC day, click once to unwrap a completely unique, utterly pointless 16-bit thing you can keep in your collection or give away to any friend!"}
           </p>
 
           {error && (
             <p
               role="alert"
-              className="mb-4 max-w-md border border-[#ff5c8a] bg-[#ff5c8a]/15 px-3.5 py-2 text-xs text-[#ff9bb6]"
+              className="mb-4 max-w-md rounded border border-[#ff4d6d] bg-[#ff4d6d]/15 px-3.5 py-2 text-xs text-[#ff99ac]"
             >
               {error}
             </p>
@@ -173,37 +173,37 @@ export function DailyParcelPedestal({
               type="button"
               disabled={pulling}
               onClick={handleOpenParcel}
-              className="rpg-btn-primary inline-flex items-center gap-2.5 px-6 py-3.5 font-pixel text-xs sm:text-sm"
+              className="rpg-btn-red inline-flex items-center gap-2.5 px-7 py-3.5 font-pixel text-xs sm:text-sm"
             >
               <Gift className="h-4 w-4" aria-hidden="true" />
-              {pulling ? "Opening Parcel..." : "Get a Thing!"}
+              {pulling ? "Finding the Right Thing..." : "Get a Thing!"}
             </button>
           ) : (
-            <p className="rounded border border-[#e5b54f]/50 bg-[#140f1d] px-4 py-2.5 text-xs text-[#fbf4e4]">
+            <p className="rounded border-2 border-[#4da6ff]/60 bg-[#160f24] px-4 py-3 text-xs text-[#fdf6e9]">
               Click <strong>Sign in with Bluesky</strong> in the top bar to get
               today&apos;s thing!
             </p>
           )}
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-[auto_1fr] md:items-center">
+        <div className="grid gap-6 md:grid-cols-[auto_1fr] md:items-center">
           {/* 16-Bit Inventory Pedestal */}
           <div className="flex flex-col items-center">
-            <div className="rpg-slot relative flex h-36 w-36 items-center justify-center p-3">
+            <div className="rpg-slot relative flex h-40 w-40 items-center justify-center p-3 border-[#4da6ff]/60">
               <img
                 src={todaysThing.iconUrl}
                 alt={todaysThing.iconAlt}
-                width={112}
-                height={112}
-                className="pixel-art h-28 w-28 object-contain"
+                width={120}
+                height={120}
+                className="pixel-art h-30 w-30 object-contain"
               />
               {justUnboxed && (
-                <span className="absolute -top-2.5 -right-2.5 rounded bg-[#ff5c8a] px-2 py-0.5 font-pixel text-[9px] text-white shadow">
+                <span className="absolute -top-2.5 -right-2.5 rounded bg-[#ff4d6d] px-2 py-0.5 font-pixel text-[9px] text-[#24040b] shadow">
                   NEW!
                 </span>
               )}
             </div>
-            <span className="mt-2 font-pixel text-xs text-[#e5b54f]">
+            <span className="mt-2 font-pixel text-xs text-[#ffd15c]">
               CATALOG #{String(todaysThing.catalogNumber).padStart(4, "0")}
             </span>
           </div>
@@ -211,35 +211,42 @@ export function DailyParcelPedestal({
           {/* Thing Details & Actions */}
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-[#140f1d] px-2.5 py-0.5 text-xs font-medium text-[#4be3a0] border border-[#4be3a0]/30">
+              <span className="rounded bg-[#160f24] px-2.5 py-0.5 text-xs font-medium text-[#8ec8ff] border border-[#4da6ff]/45">
                 {todaysThing.category}
               </span>
-              <span className="rounded bg-[#140f1d] px-2.5 py-0.5 text-xs text-[#bfb2d6]">
+              <span className="rounded bg-[#160f24] px-2.5 py-0.5 text-xs text-[#cfc3e8]">
                 {todaysThing.subcategory}
               </span>
             </div>
 
-            <h2 className="font-pixel text-base sm:text-lg text-[#fbf4e4]">
+            <h2 className="font-pixel text-base sm:text-lg text-[#fdf6e9]">
               {todaysThing.name}
             </h2>
 
-            <p className="text-sm leading-relaxed text-[#fbf4e4]/90">
+            <p className="text-sm leading-relaxed text-[#fdf6e9]/90">
               {todaysThing.description}
             </p>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-[#140f1d]/80 px-3 py-2 text-xs border border-[#8c6826]/40">
-              <span className="italic text-[#bfb2d6]">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-[#160f24]/85 px-3 py-2 text-xs border border-[#9e762a]/40">
+              <span className="italic text-[#cfc3e8]">
                 &ldquo;{todaysThing.flavorText}&rdquo;
               </span>
-              <span className="font-pixel text-[10px] text-[#f5c451]">
+              <span className="font-pixel text-[10px] text-[#ffd15c]">
                 {todaysThing.uselessTrait}
               </span>
             </div>
 
+            {pulling && (
+              <p className="rounded border border-[#4da6ff]/50 bg-[#4da6ff]/10 px-3.5 py-2 text-xs text-[#8ec8ff]">
+                Selecting another thing for you—it could take up to about 1
+                minute to find the right thing...
+              </p>
+            )}
+
             {error && (
               <p
                 role="alert"
-                className="border border-[#ff5c8a] bg-[#ff5c8a]/15 px-3.5 py-2 text-xs text-[#ff9bb6]"
+                className="rounded border border-[#ff4d6d] bg-[#ff4d6d]/15 px-3.5 py-2 text-xs text-[#ff99ac]"
               >
                 {error}
               </p>
@@ -249,7 +256,7 @@ export function DailyParcelPedestal({
               <button
                 type="button"
                 onClick={() => setGiveModalOpen(true)}
-                className="rpg-btn-primary inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
+                className="rpg-btn-red inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
               >
                 <Send className="h-3.5 w-3.5" aria-hidden="true" />
                 Give to a Friend
@@ -257,10 +264,10 @@ export function DailyParcelPedestal({
 
               <Link
                 href={`/thing/${todaysThing.thingTid}`}
-                className="rpg-btn-secondary inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
+                className="rpg-btn-blue inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
               >
                 <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
-                Inspect Ledger
+                View History
               </Link>
 
               {unlimitedPulls && (
@@ -268,10 +275,10 @@ export function DailyParcelPedestal({
                   type="button"
                   disabled={pulling}
                   onClick={handleOpenParcel}
-                  className="rpg-btn-secondary inline-flex items-center gap-2 border-[#4be3a0] px-4 py-2.5 font-pixel text-xs text-[#4be3a0]"
+                  className="rpg-btn-primary inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
                 >
                   <Gift className="h-3.5 w-3.5" aria-hidden="true" />
-                  {pulling ? "Generating..." : "Get Another Thing!"}
+                  {pulling ? "Finding Next Thing..." : "Get Another Thing!"}
                 </button>
               )}
             </div>

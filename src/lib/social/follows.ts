@@ -19,6 +19,12 @@ export interface BlueskyFriendCandidate {
   alreadyFollowing: boolean;
 }
 
+export interface BlueskyNetworkDiscovery {
+  following: BlueskyFriendCandidate[];
+  followers: BlueskyFriendCandidate[];
+  mutuals: BlueskyFriendCandidate[];
+}
+
 export async function followPlayer(params: {
   followerDid: string;
   subjectDid: string;
@@ -100,29 +106,25 @@ export async function unfollowPlayer(
 }
 
 /**
- * Fetches a user's Bluesky follow graph, caches the raw edges in `bsky_known_follows`
- * (so future friends who join Give a Thing can be matched instantly if auto-import is on),
- * and returns all Bluesky follows who are already registered on Give a Thing.
+ * Scans the viewer's Bluesky Following, Followers, and Mutuals in parallel,
+ * refreshes `bsky_known_follows`, and returns Give a Thing players grouped by
+ * `following`, `followers`, and `mutuals`.
  */
-export async function discoverBlueskyFriendsOnApp(
+export async function discoverBlueskyNetworkOnApp(
   viewerDid: string
-): Promise<BlueskyFriendCandidate[]> {
+): Promise<BlueskyNetworkDiscovery> {
   const db = getDb();
-  const bskyFollows: BlueskyActorSummary[] = await fetchAllBlueskyFollows(
-    viewerDid,
-    20
-  );
+  const [bskyFollows, bskyFollowers] = await Promise.all([
+    fetchAllBlueskyFollows(viewerDid, 15),
+    fetchBlueskyFollowers(viewerDid, 15),
+  ]);
 
   await db
     .update(schema.users)
     .set({ lastBskySyncAt: new Date() })
     .where(eq(schema.users.did, viewerDid));
 
-  if (bskyFollows.length === 0) {
-    return [];
-  }
-
-  // Refresh cached Bluesky follow edges in batches of 250
+  // Refresh cached Bluesky follow edges in batches of 250 for auto-import
   await db
     .delete(schema.bskyKnownFollows)
     .where(eq(schema.bskyKnownFollows.followerDid, viewerDid));
@@ -140,10 +142,19 @@ export async function discoverBlueskyFriendsOnApp(
       .onConflictDoNothing();
   }
 
-  const targetDids = bskyFollows.map((f) => f.did);
+  const followingDidSet = new Set(bskyFollows.map((f) => f.did));
+  const followerDidSet = new Set(bskyFollowers.map((f) => f.did));
+  const combinedDids = Array.from(
+    new Set([...followingDidSet, ...followerDidSet])
+  ).filter((did) => did !== viewerDid);
+
+  if (combinedDids.length === 0) {
+    return { following: [], followers: [], mutuals: [] };
+  }
+
   const registeredRows: Array<typeof schema.users.$inferSelect> = [];
-  for (let i = 0; i < targetDids.length; i += 250) {
-    const chunk = targetDids.slice(i, i + 250);
+  for (let i = 0; i < combinedDids.length; i += 250) {
+    const chunk = combinedDids.slice(i, i + 250);
     const found = await db
       .select()
       .from(schema.users)
@@ -151,23 +162,48 @@ export async function discoverBlueskyFriendsOnApp(
     registeredRows.push(...found);
   }
 
-  if (registeredRows.length === 0) return [];
+  if (registeredRows.length === 0) {
+    return { following: [], followers: [], mutuals: [] };
+  }
 
   const existingFollows = await db
     .select()
     .from(schema.follows)
     .where(eq(schema.follows.followerDid, viewerDid));
-  const followingSet = new Set(existingFollows.map((f) => f.subjectDid));
+  const appFollowingSet = new Set(existingFollows.map((f) => f.subjectDid));
 
-  return registeredRows
-    .filter((u) => u.did !== viewerDid)
-    .map((u) => ({
-      did: u.did,
-      handle: u.handle,
-      displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
-      alreadyFollowing: followingSet.has(u.did),
-    }));
+  const toCandidate = (
+    u: typeof schema.users.$inferSelect
+  ): BlueskyFriendCandidate => ({
+    did: u.did,
+    handle: u.handle,
+    displayName: u.displayName,
+    avatarUrl: u.avatarUrl,
+    alreadyFollowing: appFollowingSet.has(u.did),
+  });
+
+  const following: BlueskyFriendCandidate[] = [];
+  const followers: BlueskyFriendCandidate[] = [];
+  const mutuals: BlueskyFriendCandidate[] = [];
+
+  for (const u of registeredRows) {
+    if (u.did === viewerDid) continue;
+    const cand = toCandidate(u);
+    const inFollowing = followingDidSet.has(u.did);
+    const inFollowers = followerDidSet.has(u.did);
+    if (inFollowing) following.push(cand);
+    if (inFollowers) followers.push(cand);
+    if (inFollowing && inFollowers) mutuals.push(cand);
+  }
+
+  return { following, followers, mutuals };
+}
+
+export async function discoverBlueskyFriendsOnApp(
+  viewerDid: string
+): Promise<BlueskyFriendCandidate[]> {
+  const net = await discoverBlueskyNetworkOnApp(viewerDid);
+  return net.following;
 }
 
 export async function importAllBlueskyFriends(

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useId, useState } from "react";
+import Link from "next/link";
 import { Flame, Search, Sparkles } from "lucide-react";
 import type { ThingCardItem } from "@/lib/queries";
 import { MACRO_CATEGORIES } from "@/lib/generator/categories";
@@ -75,12 +76,12 @@ export function CatalogBrowser({
       <div className="rpg-panel p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="font-pixel text-sm sm:text-base text-[#f5c451]">
-              ALL DISCOVERED THINGS
+            <h1 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
+              ALL THE THINGS
             </h1>
-            <p className="text-xs text-[#bfb2d6] mt-0.5">
-              Every unique pointless thing ever pulled into existence ({totalCount}{" "}
-              discovered so far).
+            <p className="text-xs text-[#cfc3e8] mt-0.5">
+              Every unique pointless thing ever unwrapped into existence (
+              {totalCount} discovered so far).
             </p>
           </div>
 
@@ -107,7 +108,7 @@ export function CatalogBrowser({
                 void runQuery({ s: "hot_potato", p: 1 });
               }}
               className={`inline-flex items-center gap-1 px-3 py-1.5 font-pixel text-[10px] ${
-                sort === "hot_potato" ? "rpg-btn-primary" : "rpg-btn-secondary"
+                sort === "hot_potato" ? "rpg-btn-red" : "rpg-btn-secondary"
               }`}
             >
               <Flame className="h-3 w-3" aria-hidden="true" />
@@ -121,7 +122,7 @@ export function CatalogBrowser({
                 void runQuery({ s: "oldest", p: 1 });
               }}
               className={`px-3 py-1.5 font-pixel text-[10px] ${
-                sort === "oldest" ? "rpg-btn-primary" : "rpg-btn-secondary"
+                sort === "oldest" ? "rpg-btn-blue" : "rpg-btn-secondary"
               }`}
             >
               #0001+
@@ -140,7 +141,7 @@ export function CatalogBrowser({
         >
           <div className="relative flex-1">
             <label htmlFor={searchInputId} className="sr-only">
-              Search discovered things
+              Search all the things
             </label>
             <input
               id={searchInputId}
@@ -159,7 +160,7 @@ export function CatalogBrowser({
                   }
                 }
               }}
-              className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fbf4e4] placeholder:text-[#bfb2d6]/50 focus:border-[#f5c451] focus:outline-none"
+              className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
             />
           </div>
 
@@ -175,8 +176,8 @@ export function CatalogBrowser({
             }}
             className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 font-pixel text-[10px] ${
               semantic
-                ? "border-2 border-[#4be3a0] bg-[#4be3a0]/20 text-[#4be3a0]"
-                : "rpg-btn-secondary text-[#bfb2d6]"
+                ? "rpg-btn-blue"
+                : "rpg-btn-secondary text-[#cfc3e8]"
             }`}
           >
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
@@ -195,12 +196,12 @@ export function CatalogBrowser({
 
         {/* Category Pills */}
         <details className="group">
-          <summary className="cursor-pointer font-pixel text-[11px] text-[#e5b54f] hover:underline">
+          <summary className="cursor-pointer font-pixel text-[11px] text-[#8ec8ff] hover:underline">
             {category
               ? `Filtering Category: ${category} (Click to change)`
               : "Browse by 30 Thing Categories"}
           </summary>
-          <div className="pill-row mt-3 pt-2 border-t border-[#8c6826]/40">
+          <div className="pill-row mt-3 pt-2 border-t border-[#9e762a]/40">
             <button
               type="button"
               onClick={() => {
@@ -210,8 +211,8 @@ export function CatalogBrowser({
               }}
               className={`px-2.5 py-1 text-xs rounded ${
                 category === ""
-                  ? "bg-[#f5c451] font-semibold text-[#1a1105]"
-                  : "bg-[#140f1d] text-[#bfb2d6] hover:text-[#fbf4e4]"
+                  ? "bg-[#ffd15c] font-semibold text-[#1f1204]"
+                  : "bg-[#160f24] text-[#cfc3e8] hover:text-[#fdf6e9]"
               }`}
             >
               All Categories
@@ -227,8 +228,8 @@ export function CatalogBrowser({
                 }}
                 className={`px-2.5 py-1 text-xs rounded ${
                   category === m.label
-                    ? "bg-[#f5c451] font-semibold text-[#1a1105]"
-                    : "bg-[#140f1d] text-[#bfb2d6] hover:text-[#fbf4e4]"
+                    ? "bg-[#4da6ff] font-semibold text-[#07162b]"
+                    : "bg-[#160f24] text-[#cfc3e8] hover:text-[#fdf6e9]"
                 }`}
               >
                 {m.label}
@@ -240,13 +241,16 @@ export function CatalogBrowser({
 
       {/* Results Grid */}
       {items.length === 0 ? (
-        <div className="rpg-panel-subtle p-10 text-center">
-          <p className="font-pixel text-xs text-[#f5c451] mb-2">
+        <div className="rpg-panel-subtle p-10 text-center space-y-2">
+          <p className="font-pixel text-xs text-[#ffd15c]">
             No Matching Things Found
           </p>
-          <p className="text-sm text-[#bfb2d6]">
-            Try clearing your filter—or pull today&apos;s daily thing to add a
-            brand-new discovery to the catalog!
+          <p className="text-sm text-[#cfc3e8]">
+            Try clearing your filter—or head to{" "}
+            <Link href="/get" className="text-[#ff99ac] underline">
+              GET A THING
+            </Link>{" "}
+            to add a brand-new discovery!
           </p>
         </div>
       ) : (
@@ -277,7 +281,7 @@ export function CatalogBrowser({
           >
             Prev
           </button>
-          <span className="font-pixel text-xs text-[#bfb2d6]">
+          <span className="font-pixel text-xs text-[#cfc3e8]">
             Page {page} / {totalPages}
           </span>
           <button

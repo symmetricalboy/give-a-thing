@@ -135,7 +135,6 @@ export function GiveThingModal({
         router.refresh();
         onSuccess?.();
       } else {
-        // Use escrow endpoint (which also automatically upgrades to direct gift if they already joined!)
         const res = await fetch(`/api/things/${thing.thingTid}/escrow`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -179,7 +178,7 @@ export function GiveThingModal({
   return (
     <RpgModal open={open} onClose={onClose} title="Give Away This Thing">
       {/* Selected Thing Header */}
-      <div className="mb-4 flex items-center gap-3 rounded bg-[#140f1d] p-3 border border-[#8c6826]/50">
+      <div className="mb-4 flex items-center gap-3 rounded bg-[#160f24] p-3 border border-[#4da6ff]/45">
         <div className="rpg-slot flex h-14 w-14 shrink-0 items-center justify-center p-1.5">
           <img
             src={thing.iconUrl}
@@ -190,10 +189,10 @@ export function GiveThingModal({
           />
         </div>
         <div className="min-w-0">
-          <span className="font-pixel text-[11px] text-[#e5b54f]">
+          <span className="font-pixel text-[11px] text-[#ffd15c]">
             #{String(thing.catalogNumber).padStart(4, "0")}
           </span>
-          <p className="truncate font-semibold text-sm text-[#fbf4e4]">
+          <p className="truncate font-semibold text-sm text-[#fdf6e9]">
             {thing.name}
           </p>
         </div>
@@ -207,9 +206,9 @@ export function GiveThingModal({
           <p className="font-pixel text-sm text-[#4be3a0]">
             Sent to @{directSuccessHandle}!
           </p>
-          <p className="text-sm text-[#bfb2d6]">
-            Your gift has been etched permanently into this Thing&apos;s
-            ownership ledger across ATProtocol.
+          <p className="text-sm text-[#cfc3e8]">
+            Your gift has been etched forever into this thing&apos;s ownership
+            history!
           </p>
           <button
             type="button"
@@ -221,15 +220,15 @@ export function GiveThingModal({
         </div>
       ) : escrowCreated ? (
         <div className="space-y-4">
-          <div className="border-2 border-[#5cc8ff] bg-[#5cc8ff]/10 p-3.5 text-sm">
-            <p className="font-pixel text-xs text-[#5cc8ff] mb-1">
+          <div className="rounded border-2 border-[#4da6ff] bg-[#4da6ff]/10 p-3.5 text-sm">
+            <p className="font-pixel text-xs text-[#8ec8ff] mb-1">
               Set Aside for @{escrowCreated.recipientHandle}!
             </p>
-            <p className="text-xs text-[#fbf4e4]">
+            <p className="text-xs text-[#fdf6e9]">
               @{escrowCreated.recipientHandle} hasn&apos;t joined Give a Thing
-              yet, so we locked this Thing in escrow for their Bluesky DID. If
-              unclaimed after <strong>24 hours</strong>, you can revoke the
-              offer from your bag.
+              yet, so we set this thing aside for their Bluesky account! If
+              unclaimed after <strong>24 hours</strong>, you can return it from{" "}
+              <strong>MY THINGS</strong>.
             </p>
           </div>
 
@@ -237,7 +236,7 @@ export function GiveThingModal({
             href={escrowCreated.composerIntentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="rpg-btn-primary flex w-full items-center justify-center gap-2 py-3 font-pixel text-xs"
+            className="rpg-btn-blue flex w-full items-center justify-center gap-2 py-3 font-pixel text-xs"
           >
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
             Mention @{escrowCreated.recipientHandle} on Bluesky
@@ -249,7 +248,7 @@ export function GiveThingModal({
               readOnly
               aria-label="Claim URL"
               value={escrowCreated.claimUrl}
-              className="rpg-slot flex-1 px-3 py-2 text-xs text-[#bfb2d6]"
+              className="rpg-slot flex-1 px-3 py-2 text-xs text-[#cfc3e8]"
             />
             <button
               type="button"
@@ -288,7 +287,7 @@ export function GiveThingModal({
           <div className="relative">
             <label
               htmlFor={recipientInputId}
-              className="mb-1.5 block font-pixel text-xs text-[#f5c451]"
+              className="mb-1.5 block font-pixel text-xs text-[#ffd15c]"
             >
               Give To (Bluesky Handle)
             </label>
@@ -304,12 +303,12 @@ export function GiveThingModal({
                     />
                   )}
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#fbf4e4]">
+                    <p className="truncate text-sm font-medium text-[#fdf6e9]">
                       @{selectedActor.handle}
                     </p>
                     <p className="text-[11px] text-[#4be3a0]">
                       {selectedActor.isRegisteredPlayer
-                        ? "On Give a Thing — Instant Transfer"
+                        ? "On Give a Thing — Instant Gift"
                         : "Not on Give a Thing yet — 24h Claim Invite"}
                     </p>
                   </div>
@@ -346,14 +345,14 @@ export function GiveThingModal({
                       }
                     }
                   }}
-                  className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fbf4e4] placeholder:text-[#bfb2d6]/50 focus:border-[#f5c451] focus:outline-none"
+                  className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
                 />
 
                 {(searching || suggestions.length > 0) && (
-                  <ul className="scroll-region mt-1 max-h-52 divide-y divide-[#8c6826]/30 border-2 border-[#e5b54f] bg-[#1b1429] shadow-xl">
+                  <ul className="scroll-region mt-1 max-h-52 divide-y divide-[#9e762a]/30 border-2 border-[#ffd15c] bg-[#211636] shadow-xl">
                     {searching && suggestions.length === 0 && (
-                      <li className="px-3 py-2.5 text-xs text-[#bfb2d6]">
-                        Searching Bluesky directory...
+                      <li className="px-3 py-2.5 text-xs text-[#cfc3e8]">
+                        Searching Bluesky...
                       </li>
                     )}
                     {suggestions.map((actor) => (
@@ -364,7 +363,7 @@ export function GiveThingModal({
                             setSelectedActor(actor);
                             setSuggestions([]);
                           }}
-                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[#33274a]"
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[#3c2b60]"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             {actor.avatarUrl ? (
@@ -374,13 +373,13 @@ export function GiveThingModal({
                                 className="h-7 w-7 shrink-0 rounded-sm object-cover"
                               />
                             ) : (
-                              <div className="h-7 w-7 shrink-0 rounded-sm bg-[#33274a]" />
+                              <div className="h-7 w-7 shrink-0 rounded-sm bg-[#3c2b60]" />
                             )}
                             <div className="min-w-0">
-                              <p className="truncate text-xs font-semibold text-[#fbf4e4]">
+                              <p className="truncate text-xs font-semibold text-[#fdf6e9]">
                                 {actor.displayName || `@${actor.handle}`}
                               </p>
-                              <p className="truncate text-[11px] text-[#bfb2d6]">
+                              <p className="truncate text-[11px] text-[#cfc3e8]">
                                 @{actor.handle}
                               </p>
                             </div>
@@ -391,7 +390,7 @@ export function GiveThingModal({
                               PLAYER
                             </span>
                           ) : (
-                            <span className="shrink-0 rounded bg-[#5cc8ff]/20 px-2 py-0.5 font-pixel text-[9px] text-[#5cc8ff]">
+                            <span className="shrink-0 rounded bg-[#4da6ff]/20 px-2 py-0.5 font-pixel text-[9px] text-[#8ec8ff]">
                               INVITE
                             </span>
                           )}
@@ -404,16 +403,16 @@ export function GiveThingModal({
             )}
           </div>
 
-          {/* Permanent Ledger Gift Note */}
+          {/* Gift Note */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <label
                 htmlFor={noteInputId}
-                className="font-pixel text-xs text-[#f5c451]"
+                className="font-pixel text-xs text-[#ffd15c]"
               >
-                Permanent Ledger Note (Optional)
+                Gift Note (Optional)
               </label>
-              <span className="text-[11px] text-[#bfb2d6]">
+              <span className="text-[11px] text-[#cfc3e8]">
                 {note.length}/140
               </span>
             </div>
@@ -421,7 +420,7 @@ export function GiveThingModal({
               id={noteInputId}
               rows={2}
               maxLength={140}
-              placeholder="Write a note to be etched onto this Thing's provenance scroll forever..."
+              placeholder="Write a note to stay with this thing forever..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
               onKeyDown={(e) => {
@@ -433,14 +432,14 @@ export function GiveThingModal({
                   formRef.current?.requestSubmit();
                 }
               }}
-              className="rpg-slot w-full px-3.5 py-2 text-sm text-[#fbf4e4] placeholder:text-[#bfb2d6]/50 focus:border-[#f5c451] focus:outline-none"
+              className="rpg-slot w-full px-3.5 py-2 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
             />
           </div>
 
           {error && (
             <p
               role="alert"
-              className="border border-[#ff5c8a] bg-[#ff5c8a]/15 px-3 py-2 text-xs text-[#ff9bb6]"
+              className="rounded border border-[#ff4d6d] bg-[#ff4d6d]/15 px-3 py-2 text-xs text-[#ff99ac]"
             >
               {error}
             </p>
@@ -457,11 +456,11 @@ export function GiveThingModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rpg-btn-primary inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+              className="rpg-btn-red inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
             >
               <Send className="h-3.5 w-3.5" aria-hidden="true" />
               {submitting
-                ? "Recording on PDS..."
+                ? "Sending Thing..."
                 : selectedActor && !selectedActor.isRegisteredPlayer
                   ? "Set Aside & Invite"
                   : "Give Thing"}

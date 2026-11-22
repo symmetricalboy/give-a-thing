@@ -9,13 +9,15 @@ import { FriendsManager } from "@/components/FriendsManager";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Friends & Bluesky Sync",
+  title: "Find My Friends",
+  description:
+    "Search your Bluesky Following, Followers, and Mutuals to find friends on Give a Thing.",
 };
 
 export default async function FriendsPage() {
   const session = await getCurrentSession();
   if (!session) {
-    redirect("/");
+    redirect("/bag");
   }
 
   let autoImport = false;
@@ -60,6 +62,7 @@ export default async function FriendsPage() {
 
   return (
     <FriendsManager
+      viewerHandle={session.handle}
       initialAutoImport={autoImport}
       initialFollowing={following}
     />

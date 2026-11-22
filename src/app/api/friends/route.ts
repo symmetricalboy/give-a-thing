@@ -3,7 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getCurrentSession } from "@/lib/session";
 import {
-  discoverBlueskyFriendsOnApp,
+  discoverBlueskyNetworkOnApp,
   followPlayer,
   importAllBlueskyFriends,
   unfollowPlayer,
@@ -12,13 +12,16 @@ import {
 export async function GET(req: NextRequest) {
   const session = await getCurrentSession();
   if (!session) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 }
+    );
   }
 
   const scanBsky = req.nextUrl.searchParams.get("scanBsky") === "1";
   const db = getDb();
 
-  const [viewerRows, followRows] = await Promise.all([
+  const [viewerRows, followRows, followerRows] = await Promise.all([
     db
       .select()
       .from(schema.users)
@@ -28,11 +31,18 @@ export async function GET(req: NextRequest) {
       .select()
       .from(schema.follows)
       .where(eq(schema.follows.followerDid, session.did)),
+    db
+      .select()
+      .from(schema.follows)
+      .where(eq(schema.follows.subjectDid, session.did)),
   ]);
 
   const subjectDids = followRows.map((f) => f.subjectDid);
-  const followedUsers =
-    subjectDids.length > 0
+  const followerDids = followerRows.map((f) => f.followerDid);
+  const allLookupDids = Array.from(new Set([...subjectDids, ...followerDids]));
+
+  const userRows =
+    allLookupDids.length > 0
       ? await db
           .select({
             did: schema.users.did,
@@ -41,30 +51,49 @@ export async function GET(req: NextRequest) {
             avatarUrl: schema.users.avatarUrl,
           })
           .from(schema.users)
-          .where(inArray(schema.users.did, subjectDids))
+          .where(inArray(schema.users.did, allLookupDids))
       : [];
 
-  const bskyCandidates = scanBsky
-    ? await discoverBlueskyFriendsOnApp(session.did)
-    : [];
+  const userMap = new Map(userRows.map((u) => [u.did, u]));
+  const followedUsers = subjectDids
+    .map((d) => userMap.get(d))
+    .filter((u): u is NonNullable<typeof u> => Boolean(u));
+  const followerUsers = followerDids
+    .map((d) => userMap.get(d))
+    .filter((u): u is NonNullable<typeof u> => Boolean(u));
+
+  const bskyNetwork = scanBsky
+    ? await discoverBlueskyNetworkOnApp(session.did)
+    : null;
 
   return NextResponse.json({
     autoImportBskyFollows: viewerRows[0]?.autoImportBskyFollows ?? false,
     following: followedUsers,
-    bskyCandidates,
+    followers: followerUsers,
+    bskyCandidates: bskyNetwork?.following ?? [],
+    bskyNetwork,
   });
 }
 
 export async function POST(req: NextRequest) {
   const session = await getCurrentSession();
   if (!session) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 }
+    );
   }
 
   try {
     const body = (await req.json()) as {
-      action?: "follow" | "unfollow" | "import_all_bsky" | "set_auto_import";
+      action?:
+        | "follow"
+        | "unfollow"
+        | "import_all_bsky"
+        | "import_dids"
+        | "set_auto_import";
       subjectDid?: string;
+      dids?: string[];
       source?: "manual" | "bsky_import";
       enabled?: boolean;
     };
@@ -88,6 +117,22 @@ export async function POST(req: NextRequest) {
     if (body.action === "import_all_bsky") {
       const stats = await importAllBlueskyFriends(session.did, "bsky_import");
       return NextResponse.json({ ok: true, ...stats });
+    }
+
+    if (body.action === "import_dids" && Array.isArray(body.dids)) {
+      let importedCount = 0;
+      for (const targetDid of body.dids.slice(0, 300)) {
+        if (typeof targetDid !== "string" || !targetDid.startsWith("did:")) {
+          continue;
+        }
+        const res = await followPlayer({
+          followerDid: session.did,
+          subjectDid: targetDid,
+          source: "bsky_import",
+        });
+        if (res.created) importedCount++;
+      }
+      return NextResponse.json({ ok: true, importedCount });
     }
 
     if (body.action === "set_auto_import" && typeof body.enabled === "boolean") {
@@ -117,7 +162,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          err instanceof Error ? err.message : "Could not update social graph.",
+          err instanceof Error
+            ? err.message
+            : "Could not update social graph.",
       },
       { status: 400 }
     );

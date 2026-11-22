@@ -34,6 +34,7 @@ import {
   isUnlimitedPullAccount,
 } from "../src/lib/generator/pull-service";
 import { parseGeneratedThingConcept } from "../src/lib/generator/gemini";
+import { NEWS_POSTS } from "../src/lib/news";
 
 function collectSourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -378,5 +379,57 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(concept.iconAlt.length).toBeLessThanOrEqual(300);
     expect(concept.pixelArtBrief.length).toBeGreaterThan(360);
     expect(concept.pixelArtBrief.length).toBeLessThanOrEqual(1500);
+  });
+
+  it("verifies site navigation order, news feed post, copyright, and zero technical PDS/Gemini jargon in UI components", () => {
+    expect(NEWS_POSTS.length).toBeGreaterThanOrEqual(1);
+    const launchPost = NEWS_POSTS[0]!;
+    expect(launchPost.title).toBe("A THING IS BORN");
+    expect(launchPost.date).toBe("2026-11-22");
+    expect(launchPost.feedbackHandle).toBe("giveathing.com");
+
+    const navbarSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "NavbarShell.tsx"),
+      "utf8"
+    );
+    const tabLabels = [
+      'label: "HOME"',
+      'label: "GET A THING"',
+      'label: "THINGS THAT HAPPENED"',
+      'label: "MY THINGS"',
+      'label: "ALL THE THINGS"',
+    ];
+    let lastIndex = -1;
+    for (const lbl of tabLabels) {
+      const idx = navbarSrc.indexOf(lbl);
+      expect(idx, `Missing ${lbl} in NavbarShell`).toBeGreaterThan(lastIndex);
+      lastIndex = idx;
+    }
+    expect(navbarSrc).toContain(
+      "Copyright (c) 2026 Dylan Gregori Singer (symmetricalboy)"
+    );
+
+    const uiFiles = [
+      ...collectSourceFiles(path.join(process.cwd(), "src", "components")),
+      ...collectSourceFiles(path.join(process.cwd(), "src", "app")).filter(
+        (f) =>
+          !f.includes(`${path.sep}api${path.sep}`) &&
+          !f.includes(`${path.sep}oauth${path.sep}`)
+      ),
+    ];
+
+    for (const file of uiFiles) {
+      const content = fs.readFileSync(file, "utf8");
+      expect(content, `Found Gemini mention in ${file}`).not.toContain(
+        "Gemini"
+      );
+      expect(
+        content,
+        `Found buildPdsExplorerUrl in ${file}`
+      ).not.toContain("buildPdsExplorerUrl");
+      expect(content, `Found ATProtocol mention in ${file}`).not.toContain(
+        "ATProtocol"
+      );
+    }
   });
 });

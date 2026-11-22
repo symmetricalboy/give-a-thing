@@ -1,21 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --bg-void: #140f1d;
-  --bg-cabinet: #1d162b;
-  --bg-panel: #281f3b;
-  --bg-panel-raised: #33274a;
-  --bg-slot: #110c19;
-  --border-brass: #e5b54f;
-  --border-brass-dim: #8c6826;
-  --border-cream: #fff1cc;
-  --border-shadow: #0a0710;
-  --text-cream: #fbf4e4;
-  --text-muted: #bfb2d6;
-  --accent-gold: #f5c451;
-  --accent-berry: #ff5c8a;
+  --bg-void: #1b132b;
+  --bg-cabinet: #251a3c;
+  --bg-panel: #2f214c;
+  --bg-panel-raised: #3c2b60;
+  --bg-slot: #160f24;
+  --border-brass: #f2c14e;
+  --border-brass-dim: #9e762a;
+  --border-cream: #fff3d1;
+  --border-shadow: #0d0816;
+  --text-cream: #fdf6e9;
+  --text-muted: #cfc3e8;
+  --accent-gold: #ffd15c;
+  --accent-red: #ff4d6d;
+  --accent-red-soft: #ff99ac;
+  --accent-blue: #4da6ff;
+  --accent-blue-soft: #8ec8ff;
   --accent-mint: #4be3a0;
-  --accent-sky: #5cc8ff;
 }
 
 html {
@@ -28,7 +30,9 @@ body {
   min-block-size: 100dvh;
   background-color: var(--bg-void);
   background-image:
-    radial-gradient(circle at 50% 0%, rgba(229, 181, 79, 0.09) 0%, transparent 55%),
+    radial-gradient(circle at 15% 8%, rgba(255, 77, 109, 0.13) 0%, transparent 42%),
+    radial-gradient(circle at 85% 12%, rgba(77, 166, 255, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 50% 0%, rgba(255, 209, 92, 0.12) 0%, transparent 52%),
     repeating-linear-gradient(
       0deg,
       rgba(255, 255, 255, 0.014) 0px,
@@ -37,6 +41,22 @@ body {
       transparent 4px
     );
   font-family: var(--font-body), system-ui, sans-serif;
+}
+
+/* Cute 4-color retro ribbon bar (Gold, Red, Blue, Purple) */
+.candy-ribbon {
+  height: 4px;
+  background: repeating-linear-gradient(
+    90deg,
+    #ffd15c 0px,
+    #ffd15c 36px,
+    #ff4d6d 36px,
+    #ff4d6d 72px,
+    #4da6ff 72px,
+    #4da6ff 108px,
+    #a87bff 108px,
+    #a87bff 144px
+  );
 }
 
 .font-pixel {
@@ -51,57 +71,138 @@ body {
   image-rendering: crisp-edges;
 }
 
-/* Cozy 16-bit SNES/GBA RPG Window */
+/* Cozy 16-bit SNES/GBA RPG Panels */
 .rpg-panel {
   background-color: var(--bg-panel);
   border: 3px solid var(--border-brass);
+  border-radius: 6px;
   box-shadow:
     inset 0 0 0 2px var(--border-shadow),
-    inset 0 2px 0 2px rgba(255, 241, 204, 0.18),
+    inset 0 2px 0 2px rgba(255, 243, 209, 0.2),
     0 0 0 2px var(--border-shadow),
-    0 6px 0 0 rgba(10, 7, 16, 0.85);
+    0 6px 0 0 rgba(13, 8, 22, 0.85);
+}
+
+.rpg-panel-red {
+  background-color: var(--bg-panel);
+  border: 3px solid var(--accent-red);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 2px var(--border-shadow),
+    inset 0 2px 0 2px rgba(255, 153, 172, 0.22),
+    0 0 0 2px var(--border-shadow),
+    0 6px 0 0 rgba(13, 8, 22, 0.85);
+}
+
+.rpg-panel-blue {
+  background-color: var(--bg-panel);
+  border: 3px solid var(--accent-blue);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 2px var(--border-shadow),
+    inset 0 2px 0 2px rgba(142, 200, 255, 0.22),
+    0 0 0 2px var(--border-shadow),
+    0 6px 0 0 rgba(13, 8, 22, 0.85);
 }
 
 .rpg-panel-subtle {
-  background-color: rgba(40, 31, 59, 0.85);
+  background-color: rgba(47, 33, 76, 0.9);
   border: 2px solid var(--border-brass-dim);
+  border-radius: 6px;
   box-shadow:
     inset 0 0 0 2px var(--border-shadow),
-    0 4px 0 0 rgba(10, 7, 16, 0.75);
+    0 4px 0 0 rgba(13, 8, 22, 0.75);
 }
 
 /* Recessed 16-bit Inventory Slot */
 .rpg-slot {
   background-color: var(--bg-slot);
   border: 2px solid var(--border-brass-dim);
+  border-radius: 5px;
   box-shadow:
-    inset 0 3px 0 0 rgba(0, 0, 0, 0.65),
-    inset 0 0 14px rgba(229, 181, 79, 0.07),
-    0 1px 0 0 rgba(255, 241, 204, 0.12);
+    inset 0 3px 0 0 rgba(0, 0, 0, 0.6),
+    inset 0 0 14px rgba(255, 209, 92, 0.08),
+    0 1px 0 0 rgba(255, 243, 209, 0.14);
 }
 
-/* Tactile 16-bit RPG Buttons */
+/* Tactile 16-bit RPG Buttons (Gold, Blue, Red, Secondary) */
 .rpg-btn-primary {
-  background: linear-gradient(180deg, #ffd86b 0%, #e3a730 100%);
-  color: #1a1105;
-  border: 2px solid #fff4cf;
+  background: linear-gradient(180deg, #ffe07d 0%, #f0ad2b 100%);
+  color: #1f1204;
+  border: 2px solid #fff6d9;
+  border-radius: 5px;
   box-shadow:
-    0 0 0 2px #0a0710,
-    0 4px 0 2px #0a0710,
-    inset 0 -3px 0 0 #b37912;
-  transition: transform 80ms ease, filter 80ms ease;
+    0 0 0 2px #0d0816,
+    0 4px 0 2px #0d0816,
+    inset 0 -3px 0 0 #b87910;
+  transition: filter 80ms ease;
+  translate: 0px;
   cursor: pointer;
 }
 
 .rpg-btn-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
+  filter: brightness(1.07);
 }
 
 .rpg-btn-primary:active:not(:disabled) {
-  transform: translateY(2px);
+  translate: 0 2px;
 }
 
 .rpg-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rpg-btn-blue {
+  background: linear-gradient(180deg, #6bb8ff 0%, #2c82eb 100%);
+  color: #07162b;
+  border: 2px solid #d4ebff;
+  border-radius: 5px;
+  box-shadow:
+    0 0 0 2px #0d0816,
+    0 4px 0 2px #0d0816,
+    inset 0 -3px 0 0 #1754a8;
+  transition: filter 80ms ease;
+  translate: 0px;
+  cursor: pointer;
+}
+
+.rpg-btn-blue:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.rpg-btn-blue:active:not(:disabled) {
+  translate: 0 2px;
+}
+
+.rpg-btn-blue:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rpg-btn-red {
+  background: linear-gradient(180deg, #ff708a 0%, #e63758 100%);
+  color: #24040b;
+  border: 2px solid #ffd6de;
+  border-radius: 5px;
+  box-shadow:
+    0 0 0 2px #0d0816,
+    0 4px 0 2px #0d0816,
+    inset 0 -3px 0 0 #a31934;
+  transition: filter 80ms ease;
+  translate: 0px;
+  cursor: pointer;
+}
+
+.rpg-btn-red:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.rpg-btn-red:active:not(:disabled) {
+  translate: 0 2px;
+}
+
+.rpg-btn-red:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -110,24 +211,70 @@ body {
   background-color: var(--bg-panel-raised);
   color: var(--text-cream);
   border: 2px solid var(--border-brass-dim);
+  border-radius: 5px;
   box-shadow:
-    0 0 0 2px #0a0710,
-    0 3px 0 2px #0a0710;
-  transition: transform 80ms ease, border-color 120ms ease;
+    0 0 0 2px #0d0816,
+    0 3px 0 2px #0d0816;
+  transition: border-color 120ms ease, color 120ms ease;
+  translate: 0px;
   cursor: pointer;
 }
 
 .rpg-btn-secondary:hover:not(:disabled) {
-  border-color: var(--border-brass);
+  border-color: var(--accent-blue);
 }
 
 .rpg-btn-secondary:active:not(:disabled) {
-  transform: translateY(2px);
+  translate: 0 2px;
 }
 
 .rpg-btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Accessible Single-Row Tablist & Non-Color Underline (modern-web-guidance tabs) */
+.rpg-tablist {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: inline proximity;
+  gap: 0.5rem;
+  padding-block-end: 0.25rem;
+}
+
+.rpg-tablist::-webkit-scrollbar {
+  display: none;
+}
+
+.rpg-tab {
+  flex: none;
+  scroll-snap-align: start;
+  position: relative;
+  background-color: var(--bg-panel-raised);
+  color: var(--text-muted);
+  border: 2px solid var(--border-brass-dim);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+.rpg-tab:hover {
+  color: var(--text-cream);
+  border-color: var(--accent-blue);
+}
+
+.rpg-tab[aria-selected="true"] {
+  background-color: #483275;
+  color: var(--accent-gold);
+  border-color: var(--accent-gold);
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: auto 4px 2px;
+    border-block-end: 3px solid var(--accent-red);
+  }
 }
 
 /* Subgrid-aligned Thing Cards (modern-web-guidance css-layout) */
@@ -141,13 +288,11 @@ body {
 .thing-card {
   grid-row: span 3;
   display: grid;
-  /* Same-cascade fallback before subgrid */
   grid-template-rows: auto 1fr auto;
   grid-template-rows: subgrid;
   overflow: clip;
 }
 
-/* Balanced wrapped filter pills (modern-web-guidance css-layout) */
 .pill-row {
   display: flex;
   flex-wrap: wrap;
@@ -167,7 +312,7 @@ dialog {
   border: none;
   background: transparent;
   color: var(--text-cream);
-  max-inline-size: min(92dvw, 34rem);
+  max-inline-size: min(92dvw, 36rem);
   inline-size: 100%;
   margin: auto;
 }
@@ -183,35 +328,102 @@ dialog:modal {
 dialog::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;
-  background-color: rgba(11, 7, 18, 0.78);
+  background-color: rgba(13, 8, 22, 0.78);
   backdrop-filter: blur(3px);
 }
 
-/* Mystery Parcel Animations */
+/* Floating Gift Boxes & Parcel Animations (modern-web-guidance motion + individual-transform-properties) */
 @keyframes parcel-wobble {
-  0%, 100% { transform: rotate(0deg) scale(1); }
-  20% { transform: rotate(-5deg) scale(1.04); }
-  40% { transform: rotate(5deg) scale(1.06); }
-  60% { transform: rotate(-4deg) scale(1.05); }
-  80% { transform: rotate(4deg) scale(1.03); }
+  0%, 100% { rotate: 0deg; scale: 1; }
+  20% { rotate: -5deg; scale: 1.04; }
+  40% { rotate: 5deg; scale: 1.06; }
+  60% { rotate: -4deg; scale: 1.05; }
+  80% { rotate: 4deg; scale: 1.03; }
 }
 
 @keyframes float-gentle {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-4px); }
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+
+@keyframes gift-drift-a {
+  0%, 100% { translate: 0 0; rotate: -5deg; }
+  50% { translate: 4px -14px; rotate: 6deg; }
+}
+
+@keyframes gift-drift-b {
+  0%, 100% { translate: 0 0; rotate: 6deg; }
+  50% { translate: -6px -12px; rotate: -5deg; }
+}
+
+@keyframes gift-drift-c {
+  0%, 100% { translate: 0 0; rotate: -3deg; }
+  50% { translate: 5px -16px; rotate: 4deg; }
+}
+
+.animate-parcel-wobble,
+.animate-float-gentle,
+.floating-gift {
+  /* Identity transforms prevent stacking-context jumps on hover or animation toggle */
+  translate: 0px;
+  rotate: 0deg;
+  scale: 1;
+}
+
+.floating-gift {
+  transition: scale 160ms ease;
+
+  &:hover {
+    scale: 1.14;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    &:not(.is-paused).drift-a {
+      animation: gift-drift-a var(--float-dur, 4.6s) ease-in-out var(--float-delay, 0s) infinite;
+    }
+    &:not(.is-paused).drift-b {
+      animation: gift-drift-b var(--float-dur, 5.2s) ease-in-out var(--float-delay, 0s) infinite;
+    }
+    &:not(.is-paused).drift-c {
+      animation: gift-drift-c var(--float-dur, 4.9s) ease-in-out var(--float-delay, 0s) infinite;
+    }
+  }
 }
 
 .animate-parcel-wobble {
-  animation: parcel-wobble 0.65s ease-in-out infinite;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: parcel-wobble 0.65s ease-in-out infinite;
+  }
 }
 
 .animate-float-gentle {
-  animation: float-gentle 3.2s ease-in-out infinite;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: float-gentle 3.2s ease-in-out infinite;
+  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .animate-parcel-wobble,
-  .animate-float-gentle {
-    animation: none;
+/* Forced Colors Mode accessibility fallbacks (modern-web-guidance color) */
+@media (forced-colors: active) {
+  .rpg-panel,
+  .rpg-panel-red,
+  .rpg-panel-blue,
+  .rpg-panel-subtle,
+  .rpg-slot {
+    border: 2px solid CanvasText;
+  }
+
+  .rpg-btn-primary,
+  .rpg-btn-blue,
+  .rpg-btn-red,
+  .rpg-btn-secondary {
+    border: 2px solid ButtonText;
+  }
+
+  .rpg-tab[aria-selected="true"] {
+    border-color: Highlight;
+
+    &::after {
+      border-block-end-color: Highlight;
+    }
   }
 }

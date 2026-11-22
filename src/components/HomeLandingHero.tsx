@@ -1,0 +1,418 @@
+"use client";
+
+import React, { useState } from "react";
+import Link from "next/link";
+import {
+  Activity,
+  ExternalLink,
+  Gift,
+  Grid2x2,
+  Megaphone,
+  Pause,
+  Play,
+  Send,
+  Sparkles,
+  Star,
+} from "lucide-react";
+import type { NewsPost } from "@/lib/news";
+
+interface GiftBoxPalette {
+  boxFill: string;
+  boxShade: string;
+  lidFill: string;
+  ribbonFill: string;
+  ribbonHighlight: string;
+  tagFill: string;
+}
+
+const GIFT_PALETTES: Record<"redGold" | "blueGold" | "purpleRed" | "blueRed" | "goldBlue", GiftBoxPalette> = {
+  redGold: {
+    boxFill: "#e63956",
+    boxShade: "#b8253e",
+    lidFill: "#ff5c77",
+    ribbonFill: "#ffd15c",
+    ribbonHighlight: "#fff0b8",
+    tagFill: "#4da6ff",
+  },
+  blueGold: {
+    boxFill: "#2c82eb",
+    boxShade: "#1c5db0",
+    lidFill: "#52a2ff",
+    ribbonFill: "#ffd15c",
+    ribbonHighlight: "#fff0b8",
+    tagFill: "#ff4d6d",
+  },
+  purpleRed: {
+    boxFill: "#6b3fa0",
+    boxShade: "#4b2975",
+    lidFill: "#8552c2",
+    ribbonFill: "#ff4d6d",
+    ribbonHighlight: "#ff99ac",
+    tagFill: "#ffd15c",
+  },
+  blueRed: {
+    boxFill: "#d99b52",
+    boxShade: "#a87031",
+    lidFill: "#f0b76e",
+    ribbonFill: "#ff4d6d",
+    ribbonHighlight: "#ff99ac",
+    tagFill: "#4da6ff",
+  },
+  goldBlue: {
+    boxFill: "#f0b43a",
+    boxShade: "#c2891d",
+    lidFill: "#ffd15c",
+    ribbonFill: "#2c82eb",
+    ribbonHighlight: "#8ec8ff",
+    tagFill: "#ff4d6d",
+  },
+};
+
+function PixelGiftBoxSvg({
+  palette,
+  size = 56,
+}: {
+  palette: GiftBoxPalette;
+  size?: number;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+      className="pixel-art drop-shadow-[0_4px_0_rgba(13,8,22,0.75)]"
+    >
+      {/* Bow loops */}
+      <rect x="4" y="1" width="3" height="2" fill={palette.ribbonFill} />
+      <rect x="9" y="1" width="3" height="2" fill={palette.ribbonFill} />
+      <rect x="5" y="1" width="1" height="1" fill={palette.ribbonHighlight} />
+      <rect x="10" y="1" width="1" height="1" fill={palette.ribbonHighlight} />
+      <rect x="7" y="2" width="2" height="2" fill={palette.ribbonHighlight} />
+
+      {/* Dark 1px RPG outline */}
+      <rect x="2" y="3" width="12" height="1" fill="#0d0816" />
+      <rect x="1" y="4" width="1" height="3" fill="#0d0816" />
+      <rect x="14" y="4" width="1" height="3" fill="#0d0816" />
+      <rect x="2" y="7" width="1" height="7" fill="#0d0816" />
+      <rect x="13" y="7" width="1" height="7" fill="#0d0816" />
+      <rect x="3" y="14" width="10" height="1" fill="#0d0816" />
+
+      {/* Lid */}
+      <rect x="2" y="4" width="12" height="3" fill={palette.lidFill} />
+      {/* Box body */}
+      <rect x="3" y="7" width="5" height="7" fill={palette.boxFill} />
+      <rect x="8" y="7" width="5" height="7" fill={palette.boxShade} />
+
+      {/* Vertical & horizontal ribbons */}
+      <rect x="7" y="4" width="2" height="10" fill={palette.ribbonFill} />
+      <rect x="3" y="9" width="10" height="2" fill={palette.ribbonFill} />
+      <rect x="7" y="4" width="1" height="10" fill={palette.ribbonHighlight} />
+
+      {/* Cute corner accent tag */}
+      <rect x="10" y="10" width="2" height="3" fill={palette.tagFill} />
+    </svg>
+  );
+}
+
+interface FloatingBoxSpec {
+  id: number;
+  top: string;
+  left: string;
+  size: number;
+  palette: keyof typeof GIFT_PALETTES;
+  drift: "drift-a" | "drift-b" | "drift-c";
+  dur: string;
+  delay: string;
+  hideOnMobile?: boolean;
+}
+
+const FLOATING_BOXES: FloatingBoxSpec[] = [
+  { id: 1, top: "6%", left: "3%", size: 54, palette: "redGold", drift: "drift-a", dur: "4.4s", delay: "0s" },
+  { id: 2, top: "14%", left: "15%", size: 40, palette: "blueGold", drift: "drift-b", dur: "5.3s", delay: "-1.2s", hideOnMobile: true },
+  { id: 3, top: "58%", left: "4%", size: 62, palette: "blueRed", drift: "drift-c", dur: "4.8s", delay: "-2.1s" },
+  { id: 4, top: "78%", left: "13%", size: 44, palette: "purpleRed", drift: "drift-a", dur: "5.6s", delay: "-0.7s" },
+  { id: 5, top: "36%", left: "9%", size: 36, palette: "goldBlue", drift: "drift-b", dur: "4.2s", delay: "-2.8s", hideOnMobile: true },
+  { id: 6, top: "8%", left: "88%", size: 58, palette: "blueGold", drift: "drift-b", dur: "4.9s", delay: "-0.9s" },
+  { id: 7, top: "18%", left: "76%", size: 38, palette: "redGold", drift: "drift-c", dur: "5.4s", delay: "-2.3s", hideOnMobile: true },
+  { id: 8, top: "42%", left: "89%", size: 46, palette: "purpleRed", drift: "drift-a", dur: "4.5s", delay: "-1.6s", hideOnMobile: true },
+  { id: 9, top: "66%", left: "86%", size: 60, palette: "goldBlue", drift: "drift-c", dur: "5.1s", delay: "-0.4s" },
+  { id: 10, top: "82%", left: "75%", size: 42, palette: "blueRed", drift: "drift-b", dur: "4.7s", delay: "-3.1s" },
+  { id: 11, top: "5%", left: "46%", size: 34, palette: "goldBlue", drift: "drift-a", dur: "5.5s", delay: "-1.9s", hideOnMobile: true },
+  { id: 12, top: "86%", left: "48%", size: 38, palette: "redGold", drift: "drift-c", dur: "4.3s", delay: "-2.5s", hideOnMobile: true },
+  { id: 13, top: "27%", left: "2%", size: 32, palette: "blueGold", drift: "drift-c", dur: "5.8s", delay: "-1.4s", hideOnMobile: true },
+  { id: 14, top: "28%", left: "93%", size: 34, palette: "redGold", drift: "drift-b", dur: "5.0s", delay: "-0.5s", hideOnMobile: true },
+];
+
+interface HomeLandingHeroProps {
+  newsPosts: NewsPost[];
+  totalThingsCount: number;
+  authenticated: boolean;
+  viewerHandle: string | null;
+}
+
+export function HomeLandingHero({
+  newsPosts,
+  totalThingsCount,
+  authenticated,
+  viewerHandle,
+}: HomeLandingHeroProps) {
+  const [paused, setPaused] = useState(false);
+
+  return (
+    <div className="space-y-8">
+      {/* Hero Showcase with Floating Animated 16-Bit Gift Boxes */}
+      <section
+        aria-label="Welcome to Give a Thing"
+        className="rpg-panel relative overflow-hidden px-5 py-12 sm:px-10 sm:py-16"
+      >
+        {/* Pause/Play Motion Control (WCAG 2.2.2 — label toggles without aria-pressed) */}
+        <button
+          type="button"
+          onClick={() => setPaused((p) => !p)}
+          className="rpg-btn-secondary absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2.5 py-1 font-pixel text-[10px] text-[#cfc3e8]"
+        >
+          {paused ? (
+            <>
+              <Play className="h-3 w-3 text-[#4da6ff]" aria-hidden="true" />
+              Play Boxes
+            </>
+          ) : (
+            <>
+              <Pause className="h-3 w-3 text-[#ffd15c]" aria-hidden="true" />
+              Pause Boxes
+            </>
+          )}
+        </button>
+
+        {/* Floating Pixel Gift Boxes Field */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 overflow-hidden"
+        >
+          {FLOATING_BOXES.map((b) => (
+            <div
+              key={b.id}
+              style={
+                {
+                  top: b.top,
+                  left: b.left,
+                  "--float-dur": b.dur,
+                  "--float-delay": b.delay,
+                } as React.CSSProperties
+              }
+              className={`floating-gift pointer-events-auto absolute opacity-90 ${
+                b.drift
+              } ${paused ? "is-paused" : ""} ${
+                b.hideOnMobile ? "hidden md:block" : ""
+              }`}
+            >
+              <PixelGiftBoxSvg
+                palette={GIFT_PALETTES[b.palette]}
+                size={b.size}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Centerpiece Copy & CTAs */}
+        <div className="relative z-10 mx-auto max-w-2xl text-center space-y-5">
+          <div className="inline-flex items-center gap-2 rounded-full border-2 border-[#4da6ff] bg-[#160f24]/90 px-3.5 py-1 font-pixel text-[10px] text-[#8ec8ff]">
+            <Sparkles className="h-3.5 w-3.5 text-[#ffd15c]" aria-hidden="true" />
+            <span>
+              {totalThingsCount > 0
+                ? `${totalThingsCount} UNIQUE THINGS DISCOVERED SO FAR!`
+                : "A DAILY SOCIAL COLLECTIBLES GAME"}
+            </span>
+          </div>
+
+          <h1 className="font-pixel text-2xl sm:text-4xl leading-tight text-[#ffd15c] drop-shadow-[0_4px_0_#0d0816]">
+            GIVE A THING
+          </h1>
+
+          <p className="font-pixel text-xs sm:text-sm text-[#ff99ac]">
+            Get a Pointless Thing Every Day &amp; Give Things Away!
+          </p>
+
+          <p className="mx-auto max-w-xl text-sm sm:text-base leading-relaxed text-[#fdf6e9]">
+            Every day at <strong>00:00 UTC</strong>, you can unwrap one mystery
+            box to receive a completely unique, utterly pointless 16-bit thing.
+            Things don&apos;t boost stats, unlock levels, or do anything useful
+            at all—they just exist to be collected, admired, and tossed back and
+            forth between friends forever!
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Link
+              href="/get"
+              className="rpg-btn-red inline-flex items-center gap-2 px-6 py-3.5 font-pixel text-xs sm:text-sm"
+            >
+              <Gift className="h-4 w-4" aria-hidden="true" />
+              GET A THING
+            </Link>
+
+            <Link
+              href="/happened"
+              className="rpg-btn-blue inline-flex items-center gap-2 px-5 py-3.5 font-pixel text-xs sm:text-sm"
+            >
+              <Activity className="h-4 w-4" aria-hidden="true" />
+              THINGS THAT HAPPENED
+            </Link>
+
+            <Link
+              href={
+                authenticated && viewerHandle
+                  ? `/u/${encodeURIComponent(viewerHandle)}`
+                  : "/catalog"
+              }
+              className="rpg-btn-primary inline-flex items-center gap-2 px-5 py-3.5 font-pixel text-xs sm:text-sm"
+            >
+              <Grid2x2 className="h-4 w-4" aria-hidden="true" />
+              {authenticated ? "MY THINGS" : "ALL THE THINGS"}
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* How You Play & Interact With Give a Thing */}
+      <section aria-label="How Give a Thing Works" className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-[#ffd15c]" aria-hidden="true" />
+          <h2 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
+            HOW IT WORKS
+          </h2>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {/* Step 1 — Red Accent */}
+          <div className="rpg-panel-red p-5 space-y-2.5">
+            <div className="inline-flex items-center gap-2 rounded bg-[#ff4d6d]/20 px-2.5 py-1 font-pixel text-[10px] text-[#ff99ac]">
+              <Gift className="h-3.5 w-3.5" aria-hidden="true" />
+              1. UNWRAP DAILY
+            </div>
+            <h3 className="font-pixel text-xs sm:text-sm text-[#fdf6e9]">
+              One Brand-New Thing Per Day
+            </h3>
+            <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8]">
+              Sign in with Bluesky and head to{" "}
+              <Link href="/get" className="text-[#ff99ac] underline">
+                GET A THING
+              </Link>{" "}
+              once every UTC day. Every single thing is one-of-a-kind with its
+              own 16-bit pixel icon—no duplicates are ever created.
+            </p>
+          </div>
+
+          {/* Step 2 — Blue Accent */}
+          <div className="rpg-panel-blue p-5 space-y-2.5">
+            <div className="inline-flex items-center gap-2 rounded bg-[#4da6ff]/20 px-2.5 py-1 font-pixel text-[10px] text-[#8ec8ff]">
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+              2. GIVE &amp; TRADE
+            </div>
+            <h3 className="font-pixel text-xs sm:text-sm text-[#fdf6e9]">
+              Pass Things to Any Friend
+            </h3>
+            <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8]">
+              Give any of your things away at any time with an optional
+              140-character gift note etched forever onto its ownership history.
+              Even friends who haven&apos;t joined yet can get a 24-hour Bluesky
+              claim invite!
+            </p>
+          </div>
+
+          {/* Step 3 — Gold Accent */}
+          <div className="rpg-panel p-5 space-y-2.5">
+            <div className="inline-flex items-center gap-2 rounded bg-[#ffd15c]/20 px-2.5 py-1 font-pixel text-[10px] text-[#ffd15c]">
+              <Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+              3. SHOW OFF &amp; EXPLORE
+            </div>
+            <h3 className="font-pixel text-xs sm:text-sm text-[#fdf6e9]">
+              Top 8, Friends &amp; Live Feeds
+            </h3>
+            <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8]">
+              Pin your favorite 8 things on{" "}
+              <Link href="/bag" className="text-[#ffd15c] underline">
+                MY THINGS
+              </Link>
+              , find your Bluesky friends, watch pulls and gifts roll by on{" "}
+              <Link href="/happened" className="text-[#8ec8ff] underline">
+                THINGS THAT HAPPENED
+              </Link>
+              , and browse{" "}
+              <Link href="/catalog" className="text-[#4be3a0] underline">
+                ALL THE THINGS
+              </Link>
+              .
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* News & Game Updates Feed */}
+      <section aria-label="News and Updates" className="space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-[#ff4d6d]" aria-hidden="true" />
+            <h2 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
+              NEWS &amp; UPDATES
+            </h2>
+          </div>
+          <a
+            href="https://bsky.app/profile/giveathing.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-pixel text-[10px] text-[#8ec8ff] hover:underline"
+          >
+            Follow @giveathing.com
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+          </a>
+        </div>
+
+        <div className="space-y-4">
+          {newsPosts.map((post) => (
+            <article
+              key={post.id}
+              className="rpg-panel p-5 sm:p-7 space-y-3 border-l-4 border-l-[#ff4d6d]"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#9e762a]/40 pb-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-[#ff4d6d] px-2 py-0.5 font-pixel text-[9px] text-[#24040b]">
+                    {post.badge}
+                  </span>
+                  <h3 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
+                    {post.title}
+                  </h3>
+                </div>
+                <time
+                  dateTime={post.date}
+                  className="font-pixel text-[10px] text-[#8ec8ff]"
+                >
+                  {post.displayDate}
+                </time>
+              </div>
+
+              <div className="space-y-3 text-sm leading-relaxed text-[#fdf6e9]">
+                {post.paragraphs.map((p, i) => (
+                  <p key={i}>{p}</p>
+                ))}
+              </div>
+
+              <div className="pt-2">
+                <a
+                  href={`https://bsky.app/profile/${post.feedbackHandle}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rpg-btn-blue inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  Send Ideas &amp; Feedback to @{post.feedbackHandle} on Bluesky
+                </a>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}

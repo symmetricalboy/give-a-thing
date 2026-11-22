@@ -37,19 +37,19 @@ export function ClaimOfferClient({
       <div className="space-y-4 text-center pt-2">
         <div className="inline-flex items-center gap-2 rounded bg-[#4be3a0]/20 px-3.5 py-1.5 font-pixel text-xs text-[#4be3a0]">
           <Sparkles className="h-4 w-4" aria-hidden="true" />
-          Added to Your Things &amp; ATProtocol PDS!
+          Added to Your Things!
         </div>
         <div className="flex flex-wrap justify-center gap-3">
           <Link
             href={`/thing/${thingTid}`}
-            className="rpg-btn-primary inline-flex items-center gap-2 px-5 py-2.5 font-pixel text-xs"
+            className="rpg-btn-blue inline-flex items-center gap-2 px-5 py-2.5 font-pixel text-xs"
           >
             <ScrollText className="h-4 w-4" aria-hidden="true" />
-            View Provenance Ledger
+            View Ownership History
           </Link>
           <Link
-            href="/"
-            className="rpg-btn-secondary inline-flex items-center gap-2 px-5 py-2.5 font-pixel text-xs"
+            href="/get"
+            className="rpg-btn-red inline-flex items-center gap-2 px-5 py-2.5 font-pixel text-xs"
           >
             <Gift className="h-4 w-4" aria-hidden="true" />
             Get Today&apos;s Free Thing Too!
@@ -61,7 +61,7 @@ export function ClaimOfferClient({
 
   if (status === "revoked") {
     return (
-      <p className="rounded border border-[#ff5c8a]/50 bg-[#ff5c8a]/10 px-4 py-3 text-center text-xs text-[#ff9bb6]">
+      <p className="rounded border border-[#ff4d6d]/50 bg-[#ff4d6d]/10 px-4 py-3 text-center text-xs text-[#ff99ac]">
         This offer went unclaimed for over 24 hours and was returned to the
         sender.
       </p>
@@ -74,7 +74,7 @@ export function ClaimOfferClient({
         {error && (
           <p
             role="alert"
-            className="border border-[#ff5c8a] bg-[#ff5c8a]/15 px-3 py-2 text-xs text-[#ff9bb6]"
+            className="rounded border border-[#ff4d6d] bg-[#ff4d6d]/15 px-3 py-2 text-xs text-[#ff99ac]"
           >
             {error}
           </p>
@@ -102,10 +102,10 @@ export function ClaimOfferClient({
               setBusy(false);
             }
           }}
-          className="rpg-btn-primary inline-flex items-center gap-2.5 px-7 py-3.5 font-pixel text-xs sm:text-sm"
+          className="rpg-btn-red inline-flex items-center gap-2.5 px-7 py-3.5 font-pixel text-xs sm:text-sm"
         >
           <Gift className="h-4 w-4" aria-hidden="true" />
-          {busy ? "Recording Claim on Your PDS..." : "Claim Your Thing!"}
+          {busy ? "Claiming Your Thing..." : "Claim Your Thing!"}
         </button>
       </div>
     );
@@ -113,10 +113,9 @@ export function ClaimOfferClient({
 
   if (viewerDid && viewerDid !== recipientDid) {
     return (
-      <div className="rounded border border-[#e5b54f]/50 bg-[#140f1d] p-4 text-center text-xs text-[#bfb2d6]">
+      <div className="rounded border border-[#ffd15c]/50 bg-[#160f24] p-4 text-center text-xs text-[#cfc3e8]">
         You are signed in as <strong>@{viewerHandle}</strong>, while this thing
-        is locked specifically for <strong>@{recipientHandle}</strong>&apos;s
-        Bluesky DID.
+        was set aside specifically for <strong>@{recipientHandle}</strong>.
       </div>
     );
   }
@@ -144,7 +143,7 @@ export function ClaimOfferClient({
           }
           window.location.href = data.url;
         } catch {
-          setError("Network error starting Bluesky OAuth.");
+          setError("Network error starting Bluesky sign-in.");
           setBusy(false);
         }
       }}
@@ -152,7 +151,7 @@ export function ClaimOfferClient({
     >
       <label
         htmlFor={handleInputId}
-        className="block font-pixel text-xs text-[#f5c451] text-center"
+        className="block font-pixel text-xs text-[#ffd15c] text-center"
       >
         Sign in as @{recipientHandle} to Claim
       </label>
@@ -163,18 +162,18 @@ export function ClaimOfferClient({
           required
           value={loginHandle}
           onChange={(e) => setLoginHandle(e.target.value)}
-          className="rpg-slot flex-1 px-3.5 py-2.5 text-sm text-[#fbf4e4]"
+          className="rpg-slot flex-1 px-3.5 py-2.5 text-sm text-[#fdf6e9]"
         />
         <button
           type="submit"
           disabled={busy}
-          className="rpg-btn-primary px-5 py-2.5 font-pixel text-xs"
+          className="rpg-btn-blue px-5 py-2.5 font-pixel text-xs"
         >
           {busy ? "Redirecting..." : "Sign in & Claim"}
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-center text-xs text-[#ff9bb6]">
+        <p role="alert" className="text-center text-xs text-[#ff99ac]">
           {error}
         </p>
       )}

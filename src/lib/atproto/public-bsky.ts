@@ -7,6 +7,128 @@ export interface BlueskyActorSummary {
   avatar?: string;
 }
 
+export interface BlueskyProfileLink {
+  url: string;
+  title: string;
+  icon: string | null;
+}
+
+export interface BlueskyRichProfile {
+  did: string;
+  handle: string;
+  displayName: string | null;
+  avatar: string | null;
+  banner: string | null;
+  pronouns: string | null;
+  bio: string | null;
+  links: BlueskyProfileLink[];
+  bskyProfileUrl: string;
+}
+
+function normalizeSafeUrl(raw?: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const u = new URL(
+      /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+    );
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchRichBlueskyProfile(
+  actor: string
+): Promise<BlueskyRichProfile | null> {
+  const clean = actor.trim().replace(/^@/, "");
+  if (!clean) return null;
+
+  try {
+    const url = new URL(`${BSKY_PUBLIC_API}/app.bsky.actor.getProfile`);
+    url.searchParams.set("actor", clean);
+    const res = await fetch(url.toString(), {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 120 },
+    });
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      did: string;
+      handle: string;
+      displayName?: string;
+      avatar?: string;
+      banner?: string;
+      pronouns?: string;
+      website?: string;
+      description?: string;
+      links?: Array<{
+        url?: string;
+        title?: string;
+        icon?: string;
+      }>;
+    };
+
+    const seenUrls = new Set<string>();
+    const links: BlueskyProfileLink[] = [];
+
+    const addLink = (rawUrl?: string | null, title?: string | null, icon?: string | null) => {
+      const safe = normalizeSafeUrl(rawUrl);
+      if (!safe) return;
+      const key = safe.replace(/\/+$/, "").toLowerCase();
+      if (seenUrls.has(key)) return;
+      seenUrls.add(key);
+
+      let fallbackTitle = safe;
+      try {
+        const parsed = new URL(safe);
+        fallbackTitle = parsed.hostname.replace(/^www\./i, "") + (parsed.pathname !== "/" ? parsed.pathname : "");
+      } catch {
+        // Keep raw safe URL
+      }
+
+      links.push({
+        url: safe,
+        title: title?.trim() || fallbackTitle,
+        icon: normalizeSafeUrl(icon),
+      });
+    };
+
+    if (Array.isArray(data.links)) {
+      for (const l of data.links) {
+        addLink(l.url, l.title, l.icon);
+      }
+    }
+
+    if (data.website) {
+      addLink(data.website, null, null);
+    }
+
+    if (data.description) {
+      const urlMatches = data.description.match(/https?:\/\/[^\s<>)"']+/gi) ?? [];
+      for (const match of urlMatches) {
+        addLink(match.replace(/[.,;:!?]+$/, ""), null, null);
+      }
+    }
+
+    return {
+      did: data.did,
+      handle: data.handle,
+      displayName: data.displayName?.trim() || null,
+      avatar: normalizeSafeUrl(data.avatar),
+      banner: normalizeSafeUrl(data.banner),
+      pronouns: data.pronouns?.trim() || null,
+      bio: data.description?.trim() || null,
+      links,
+      bskyProfileUrl: `https://bsky.app/profile/${encodeURIComponent(data.handle)}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveActorProfile(
   actor: string
 ): Promise<BlueskyActorSummary | null> {

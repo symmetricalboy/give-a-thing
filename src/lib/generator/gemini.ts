@@ -190,7 +190,9 @@ Return JSON strictly matching the schema.`;
 
   const rawJson = interaction.output_text;
   if (!rawJson) {
-    throw new Error("Gemini 4 Carbon returned an empty output_text.");
+    throw new Error(
+      "Could not select a thing right now—please try again in a moment."
+    );
   }
 
   const cleanedJson = rawJson

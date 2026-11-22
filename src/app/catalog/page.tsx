@@ -7,9 +7,9 @@ import { CatalogBrowser } from "@/components/CatalogBrowser";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Discovery Catalog",
+  title: "All the Things",
   description:
-    "Browse every unique pointless 16-bit Thing ever discovered on Give a Thing.",
+    "Browse every unique pointless 16-bit thing ever unwrapped on Give a Thing.",
 };
 
 export default async function CatalogPage() {
