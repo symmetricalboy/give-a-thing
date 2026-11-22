@@ -35,8 +35,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/cover.png",
-        width: 1600,
-        height: 900,
+        width: 1400,
+        height: 1400,
         alt: "Give a Thing — 16-bit mystery parcel and pointless inventory things",
       },
     ],

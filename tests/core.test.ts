@@ -197,9 +197,14 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(parsedAtmosphere.category).toBe("browser");
     expect(parsedAtmosphere.cover).toBeDefined();
     expect(parsedAtmosphere.media).toBeUndefined();
-    expect(parsedAtmosphere.uses?.length).toBe(9);
-    expect(parsedAtmosphere.tags).toContain("cozy");
-    expect(parsedAtmosphere.tags).toContain("alpha");
+    expect(parsedAtmosphere.requires?.length).toBe(1);
+    expect(parsedAtmosphere.requires?.[0]?.nsid).toBe("app.bsky.actor.profile");
+    expect(parsedAtmosphere.uses?.length).toBe(8);
+    expect(
+      parsedAtmosphere.uses?.find((u) => u.nsid === "app.bsky.graph.follow")
+        ?.acquire
+    ).toBe("https://bsky.app");
+    expect(parsedAtmosphere.tags).toEqual(["Alpha", "Collectibles", "Social"]);
 
     const coverPath = path.join(process.cwd(), "public", "cover.png");
     expect(fs.existsSync(coverPath)).toBe(true);

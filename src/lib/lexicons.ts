@@ -274,27 +274,14 @@ export function buildAtmosphereDefineRecord(params: {
     name: "Give a Thing",
     tagline: "Get a Pointless Thing Every Day & Give Things Away",
     description:
-      "Give a Thing is a cozy, slightly absurd social collection game built natively on ATProtocol. Every day at 00:00 UTC, every player can unwrap a mystery parcel to discover one completely pointless, one-of-a-kind thing—ranging from fantasy weapons and 90s memorabilia to everyday household oddities, famous artworks, food, and bottled abstract thoughts—paired with a custom 16-bit RPG inventory sprite. Every pull checks the full history of discovered things so duplicates are never generated. Things have zero combat stats and zero monetary value: the entire joy is trading them. Give any of your things to any friend at any time for no reason at all, etch an optional 140-character gift note into its permanent ownership ledger, or pass the same favorite thing back and forth dozens of times. Sending a thing to a Bluesky friend who hasn't joined yet places it in 24-hour claimable escrow with a shareable Bluesky mention card. Canonical thing definitions and append-only provenance ledgers live permanently on ATProtocol, while active holdings, Profile Top 8 featured showcases, signed transfer receipts, and friend follows are stored in each player's own Personal Data Server (PDS). Give a Thing is currently in Alpha—expect active iteration, new categories, UI refinements, and occasional rough edges as the global catalog grows.",
+      "Every day at UTC midnight, unwrap a mystery parcel to get one completely pointless, never-duplicated 16-bit thing. Feature your favorites in your profile Top 8 or give any of your things away to friends at any time for no reason—complete with gift notes and a permanent ownership ledger on ATProtocol. Currently in Alpha.",
     url: cleanUrl,
     publisher: `at://${params.repoDid}`,
     legacyIds: ["giveathing", "give-a-thing"],
     category: "browser",
     status: "alpha",
     releasedAt,
-    tags: [
-      "cozy",
-      "rpg",
-      "creative",
-      "social",
-      "collectibles",
-      "daily",
-      "pixel-art",
-      "trading",
-      "inventory",
-      "atproto",
-      "indie",
-      "alpha",
-    ],
+    tags: ["Alpha", "Collectibles", "Social"],
     ...(params.coverBlob ? { cover: params.coverBlob } : {}),
     ...(params.iconBlob ? { icon: params.iconBlob } : {}),
     developer: {
@@ -307,6 +294,16 @@ export function buildAtmosphereDefineRecord(params: {
       "symmetricalboy.com",
       params.repoDid,
       "giveathing.com",
+    ],
+    requires: [
+      {
+        check: "record",
+        nsid: "app.bsky.actor.profile",
+        rkey: "self",
+        label:
+          "Sign in with your Bluesky / ATProtocol account to pull daily things and give things to friends.",
+        acquire: "https://bsky.app",
+      },
     ],
     uses: [
       {
@@ -394,20 +391,11 @@ export function buildAtmosphereDefineRecord(params: {
           "Player follow graph powering the Following social feed and quick friend gifting picker.",
       },
       {
-        nsid: "app.bsky.actor.profile",
-        rkey: "self",
-        role: "profile",
-        label: "Bluesky Profile Identity",
-        acquire: "https://bsky.app",
-        purpose:
-          "Displays player handles, display names, and avatars across profiles, social feeds, and ownership ledgers.",
-      },
-      {
         nsid: "app.bsky.graph.follow",
         rkey: "any",
         role: "interop",
         label: "Bluesky Follows Import",
-        acquire: `${cleanUrl}/friends`,
+        acquire: "https://bsky.app",
         purpose:
           "Imports Bluesky friends who also play Give a Thing and optionally auto-follows friends as they join.",
       },
