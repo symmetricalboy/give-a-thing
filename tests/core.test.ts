@@ -178,12 +178,36 @@ describe("Give a Thing — Core Engine Verification", () => {
     const atmosphereRecord = buildAtmosphereDefineRecord({
       repoDid: "did:plc:giveathingapp",
       appUrl: "https://giveathing.com",
+      iconBlob: { $type: "blob", mimeType: "image/png", size: 1537 },
+      coverBlob: { $type: "blob", mimeType: "image/png", size: 410000 },
+      mediaItems: [
+        {
+          type: "screenshot",
+          image: { $type: "blob", mimeType: "image/png", size: 500000 },
+          alt: "Daily mystery parcel unwrapping",
+          width: 1600,
+          height: 900,
+        },
+      ],
     });
     const parsedAtmosphere =
       AtmosphereDefineRecordSchema.parse(atmosphereRecord);
     expect(parsedAtmosphere.$type).toBe("games.atmosphere.define");
+    expect(parsedAtmosphere.name).toBe("Give a Thing");
+    expect(parsedAtmosphere.tagline).toBeTruthy();
+    expect(parsedAtmosphere.tagline).not.toContain("Give a Thing");
+    expect(parsedAtmosphere.status).toBe("alpha");
     expect(parsedAtmosphere.publisher).toBe("at://did:plc:giveathingapp");
     expect(parsedAtmosphere.category).toBe("browser");
+    expect(parsedAtmosphere.cover).toBeDefined();
+    expect(parsedAtmosphere.media?.length).toBe(1);
+    expect(parsedAtmosphere.uses?.length).toBe(9);
+    expect(parsedAtmosphere.tags).toContain("cozy");
+    expect(parsedAtmosphere.tags).toContain("alpha");
+
+    const coverPath = path.join(process.cwd(), "public", "cover.png");
+    expect(fs.existsSync(coverPath)).toBe(true);
+    expect(fs.statSync(coverPath).size).toBeLessThan(950_000);
   });
 
   it("verifies public/avatar.png exists as a 1024x1024 PNG and keeps all parcel pixels inside a circular avatar crop", async () => {

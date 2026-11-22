@@ -134,6 +134,66 @@ export const FollowRecordSchema = z.object({
   createdAt: z.string(),
 });
 
+export const AtmosphereFilterSchema = z.object({
+  field: z.string().max(200),
+  op: z.enum([
+    "exists",
+    "notExists",
+    "isPlayer",
+    "eq",
+    "neq",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+  ]),
+  value: z.unknown().optional(),
+});
+
+export const AtmosphereRuleSchema: z.ZodType<{
+  check: "record" | "field" | "matches" | "vouch" | "all" | "any" | "not";
+  nsid?: string;
+  rkey?: string;
+  field?: string;
+  op?: string;
+  value?: unknown;
+  authority?: string;
+  filters?: Array<z.infer<typeof AtmosphereFilterSchema>>;
+  label?: string;
+  acquire?: string;
+}> = z.object({
+  check: z.enum(["record", "field", "matches", "vouch", "all", "any", "not"]),
+  nsid: z.string().optional(),
+  rkey: z.string().max(50).optional(),
+  field: z.string().max(200).optional(),
+  op: z.string().optional(),
+  value: z.unknown().optional(),
+  authority: z.string().startsWith("did:").optional(),
+  filters: z.array(AtmosphereFilterSchema).max(8).optional(),
+  label: z.string().max(120).optional(),
+  acquire: z.string().url().optional(),
+});
+
+export const AtmosphereMediaItemSchema = z.object({
+  image: z.any(),
+  type: z
+    .enum([
+      "screenshot",
+      "banner",
+      "artwork",
+      "poster",
+      "background",
+      "logo",
+      "thumbnail",
+    ])
+    .optional(),
+  alt: z.string().max(300).optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+});
+
+export type AtmosphereMediaItem = z.infer<typeof AtmosphereMediaItemSchema>;
+
 export const AtmosphereDefineRecordSchema = z.object({
   $type: z.literal(LEXICON_NSIDS.ATMOSPHERE_DEFINE),
   name: z.string().min(1).max(100),
@@ -141,10 +201,14 @@ export const AtmosphereDefineRecordSchema = z.object({
   description: z.string().max(2000).optional(),
   url: z.string().url(),
   publisher: z.string().startsWith("at://"),
+  legacyIds: z.array(z.string().max(80)).max(12).optional(),
   category: z.enum(["browser", "download", "physical", "other"]),
-  status: z.enum(["live", "beta", "coming", "archived"]).optional(),
+  status: z.string().max(40).optional(),
+  releasedAt: z.string().optional(),
   tags: z.array(z.string().max(32)).max(12).optional(),
+  cover: z.any().optional(),
   icon: z.any().optional(),
+  media: z.array(AtmosphereMediaItemSchema).max(24).optional(),
   developer: z
     .object({
       name: z.string().max(100),
@@ -152,11 +216,14 @@ export const AtmosphereDefineRecordSchema = z.object({
       url: z.string().url().optional(),
     })
     .optional(),
+  claimAllowed: z.array(z.string().max(128)).max(12).optional(),
+  requires: z.array(AtmosphereRuleSchema).max(16).optional(),
   uses: z
     .array(
       z.object({
         nsid: z.string(),
         rkey: z.string().max(50).optional(),
+        path: z.string().max(200).optional(),
         role: z.enum([
           "character",
           "perk",
@@ -174,6 +241,8 @@ export const AtmosphereDefineRecordSchema = z.object({
         acquire: z.string().url().optional(),
         purpose: z.string().max(300).optional(),
         authority: z.string().startsWith("did:").optional(),
+        filters: z.array(AtmosphereFilterSchema).max(8).optional(),
+        verify: AtmosphereRuleSchema.optional(),
       })
     )
     .max(32)
@@ -190,48 +259,70 @@ export function buildAtmosphereDefineRecord(params: {
   repoDid: string;
   appUrl: string;
   iconBlob?: unknown;
+  coverBlob?: unknown;
+  mediaItems?: AtmosphereMediaItem[];
   createdAtIso?: string;
+  releasedAtIso?: string;
   updatedAtIso?: string;
 }): AtmosphereDefineRecord {
   const cleanUrl = params.appUrl.replace(/\/+$/, "");
   const nowIso = params.updatedAtIso ?? new Date().toISOString();
   const createdAt = params.createdAtIso ?? nowIso;
+  const releasedAt = params.releasedAtIso ?? createdAt;
 
   return {
     $type: LEXICON_NSIDS.ATMOSPHERE_DEFINE,
     name: "Give a Thing",
     tagline:
-      "Get a unique pointless 16-bit thing every day and give things to your friends.",
+      "One unique pointless 16-bit thing every UTC day—keep yours or give it to a friend for no reason.",
     description:
-      "Every UTC midnight, click a button to get a completely pointless, never-duplicated thing with a 16-bit pixel-art inventory icon. Give any of your things to any of your friends at any time for no reason, building a permanent ownership ledger across ATProtocol.",
+      "Give a Thing is a cozy, slightly absurd social collection game built natively on ATProtocol. Every day at 00:00 UTC, every player can unwrap a mystery parcel to discover one completely pointless, one-of-a-kind thing—ranging from fantasy weapons and 90s memorabilia to everyday household oddities, famous artworks, food, and bottled abstract thoughts—paired with a custom 16-bit RPG inventory sprite. Every pull checks the full history of discovered things so duplicates are never generated. Things have zero combat stats and zero monetary value: the entire joy is trading them. Give any of your things to any friend at any time for no reason at all, etch an optional 140-character gift note into its permanent ownership ledger, or pass the same favorite thing back and forth dozens of times. Sending a thing to a Bluesky friend who hasn't joined yet places it in 24-hour claimable escrow with a shareable Bluesky mention card. Canonical thing definitions and append-only provenance ledgers live permanently on ATProtocol, while active holdings, Profile Top 8 featured showcases, signed transfer receipts, and friend follows are stored in each player's own Personal Data Server (PDS). Give a Thing is currently in Alpha—expect active iteration, new categories, UI refinements, and occasional rough edges as the global catalog grows.",
     url: cleanUrl,
     publisher: `at://${params.repoDid}`,
+    legacyIds: ["giveathing", "give-a-thing"],
     category: "browser",
-    status: "live",
-    tags: ["social", "collectibles", "daily", "pixel-art", "trading"],
+    status: "alpha",
+    releasedAt,
+    tags: [
+      "cozy",
+      "rpg",
+      "creative",
+      "social",
+      "collectibles",
+      "daily",
+      "pixel-art",
+      "trading",
+      "inventory",
+      "atproto",
+      "indie",
+      "alpha",
+    ],
+    ...(params.coverBlob ? { cover: params.coverBlob } : {}),
     ...(params.iconBlob ? { icon: params.iconBlob } : {}),
+    ...(params.mediaItems && params.mediaItems.length > 0
+      ? { media: params.mediaItems }
+      : {}),
     developer: {
       name: "Give a Thing",
       did: params.repoDid,
       url: "https://bsky.app/profile/giveathing.com",
     },
+    claimAllowed: [params.repoDid, "giveathing.com"],
     uses: [
       {
         nsid: LEXICON_NSIDS.HOLDING,
         rkey: "any",
         role: "inventory",
-        label: "Things Owned",
-        acquire: cleanUrl,
+        label: "Things Owned & Top 8 Showcase",
+        acquire: `${cleanUrl}/bag`,
         purpose:
-          "Things currently owned by a player, including provenance history and Top 8 favorite status.",
-      },
-      {
-        nsid: LEXICON_NSIDS.TRANSFER,
-        rkey: "any",
-        role: "activity",
-        label: "Things Given",
-        acquire: cleanUrl,
-        purpose: "Signed receipts of things a player has given away to friends.",
+          "Active possession records in each player's PDS for every pointless 16-bit thing they hold, including provenance hops and Top 8 profile showcase slots.",
+        verify: {
+          check: "record",
+          nsid: LEXICON_NSIDS.HOLDING,
+          label: "Holds at least one thing in their bag",
+          acquire: cleanUrl,
+        },
       },
       {
         nsid: LEXICON_NSIDS.THING,
@@ -241,7 +332,84 @@ export function buildAtmosphereDefineRecord(params: {
         label: "Discovered Things Catalog",
         acquire: `${cleanUrl}/catalog`,
         purpose:
-          "Immutable genesis records for every unique thing discovered in Give a Thing.",
+          "Immutable genesis records in @giveathing.com's PDS for every unique, never-duplicated thing pulled by players, with its 16-bit sprite blob and pointless trait.",
+        verify: {
+          check: "vouch",
+          authority: params.repoDid,
+          nsid: LEXICON_NSIDS.THING,
+          label: "Discovered a thing on Give a Thing",
+          acquire: cleanUrl,
+          filters: [
+            {
+              field: "discoveredBy",
+              op: "isPlayer",
+            },
+          ],
+        },
+      },
+      {
+        nsid: LEXICON_NSIDS.LEDGER_ENTRY,
+        rkey: "any",
+        role: "activity",
+        authority: params.repoDid,
+        label: "Permanent Ownership Ledger",
+        acquire: `${cleanUrl}/catalog`,
+        purpose:
+          "Append-only provenance chain recording the original discoverer and every subsequent owner and 140-character gift note for each thing.",
+      },
+      {
+        nsid: LEXICON_NSIDS.TRANSFER,
+        rkey: "any",
+        role: "activity",
+        label: "Direct Gift Receipts",
+        acquire: `${cleanUrl}/bag`,
+        purpose:
+          "Signed transfer receipts published in a sender's PDS whenever they give a thing to another player.",
+      },
+      {
+        nsid: LEXICON_NSIDS.OFFER,
+        rkey: "any",
+        role: "activity",
+        label: "Pending Gift Escrow Offers",
+        acquire: `${cleanUrl}/bag`,
+        purpose:
+          "Escrow offers reserving a thing for a Bluesky friend who has not joined Give a Thing yet, revocable by the sender after 24 hours if unclaimed.",
+      },
+      {
+        nsid: LEXICON_NSIDS.CLAIM,
+        rkey: "any",
+        role: "activity",
+        label: "Claimed Gift Receipts",
+        acquire: cleanUrl,
+        purpose:
+          "Signed claim records written to a recipient's PDS when they accept a pending gift offer.",
+      },
+      {
+        nsid: LEXICON_NSIDS.FOLLOW,
+        rkey: "any",
+        role: "profile",
+        label: "Give a Thing Friends Graph",
+        acquire: `${cleanUrl}/friends`,
+        purpose:
+          "Player follow graph powering the Following social feed and quick friend gifting picker.",
+      },
+      {
+        nsid: "app.bsky.actor.profile",
+        rkey: "self",
+        role: "profile",
+        label: "Bluesky Profile Identity",
+        acquire: "https://bsky.app",
+        purpose:
+          "Displays player handles, display names, and avatars across profiles, social feeds, and ownership ledgers.",
+      },
+      {
+        nsid: "app.bsky.graph.follow",
+        rkey: "any",
+        role: "interop",
+        label: "Bluesky Follows Import",
+        acquire: `${cleanUrl}/friends`,
+        purpose:
+          "Imports Bluesky friends who also play Give a Thing and optionally auto-follows friends as they join.",
       },
     ],
     createdAt,

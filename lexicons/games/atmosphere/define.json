@@ -1,92 +1,331 @@
 {
-  "lexicon": 1,
-  "id": "games.atmosphere.define",
-  "description": "Official ATmosphere Games portable game definition schema for directory indexing at atmosphere.games.",
-  "defs": {
-    "main": {
-      "type": "record",
-      "key": "any",
-      "description": "One game definition per record, published in the developer's own repo. Keep the same rkey to update it in place.",
-      "record": {
-        "type": "object",
-        "required": ["name", "url", "publisher", "category", "createdAt"],
-        "properties": {
-          "name": { "type": "string", "maxLength": 100 },
-          "tagline": { "type": "string", "maxLength": 200 },
-          "description": { "type": "string", "maxLength": 2000 },
-          "url": { "type": "string", "format": "uri" },
-          "publisher": { "type": "string", "format": "at-uri" },
-          "category": {
-            "type": "string",
-            "maxLength": 30,
-            "knownValues": ["browser", "download", "physical", "other"]
-          },
-          "status": {
-            "type": "string",
-            "knownValues": ["live", "beta", "coming", "archived"]
-          },
-          "tags": {
-            "type": "array",
-            "maxLength": 12,
-            "items": { "type": "string", "maxLength": 32 }
-          },
-          "icon": {
-            "type": "blob",
-            "accept": ["image/png", "image/webp"],
-            "maxSize": 512000
-          },
-          "cover": {
-            "type": "blob",
-            "accept": ["image/png", "image/jpeg", "image/webp"],
-            "maxSize": 4000000
-          },
-          "developer": { "type": "ref", "ref": "#party" },
-          "uses": {
-            "type": "array",
-            "maxLength": 32,
-            "items": { "type": "ref", "ref": "#recordUse" }
-          },
-          "createdAt": { "type": "string", "format": "datetime" },
-          "updatedAt": { "type": "string", "format": "datetime" }
-        }
-      }
-    },
-    "party": {
-      "type": "object",
-      "required": ["name"],
-      "properties": {
-        "name": { "type": "string", "maxLength": 100 },
-        "did": { "type": "string", "format": "did" },
-        "url": { "type": "string", "format": "uri" }
-      }
-    },
-    "recordUse": {
-      "type": "object",
-      "required": ["role", "nsid"],
-      "properties": {
-        "nsid": { "type": "string", "format": "nsid" },
-        "rkey": { "type": "string", "maxLength": 50 },
-        "role": {
-          "type": "string",
-          "knownValues": [
-            "character",
-            "perk",
-            "cosmetic",
-            "interop",
-            "stats",
-            "activity",
-            "leaderboard",
-            "profile",
-            "session",
-            "inventory",
-            "other"
-          ]
+    "lexicon": 1,
+    "id": "games.atmosphere.define",
+    "description": "A game definition: what it is, what a player needs to play it, and what records it uses.",
+    "defs": {
+
+        "main": {
+            "type": "record",
+            "description": "One game definition per record, published in the developer's own repo. Keep the same rkey to update it in place.",
+            "key": "any",
+            "record": {
+                "type": "object",
+                "required": ["name", "url", "publisher", "category", "createdAt"],
+                "properties": {
+
+                    "name": { "type": "string", "maxLength": 100, "description": "Display name." },
+                    "tagline": { "type": "string", "maxLength": 200, "description": "One-line summary." },
+                    "description": { "type": "string", "maxLength": 2000, "description": "Full description." },
+                    "url": { "type": "string", "format": "uri", "description": "Where to play, download, or access the game." },
+                    "publisher": { "type": "string", "format": "at-uri", "description": "AT-URI of the repo that owns this record. Must match this record's own repo." },
+                    "legacyIds": {
+                        "type": "array",
+                        "description": "Old IDs used for this same game by other catalogs or tools.",
+                        "maxLength": 12,
+                        "items": { "type": "string", "maxLength": 80 }
+                    },
+                    "category": {
+                        "type": "string",
+                        "maxLength": 30,
+                        "knownValues": ["browser", "download", "physical", "other"],
+                        "description": "Type of experience."
+                    },
+                    "tags": {
+                        "type": "array",
+                        "description": "Freeform search tags.",
+                        "maxLength": 12,
+                        "items": { "type": "string", "maxLength": 32 }
+                    },
+
+                    "cover": {
+                        "type": "blob",
+                        "accept": ["image/png", "image/jpeg", "image/webp"],
+                        "maxSize": 4000000,
+                        "description": "Card thumbnail image. 16:9 recommended."
+                    },
+                    "icon": {
+                        "type": "blob",
+                        "accept": ["image/png", "image/webp"],
+                        "maxSize": 512000,
+                        "description": "Square icon. 256x256 recommended."
+                    },
+                    "media": {
+                        "type": "array",
+                        "description": "Extra screenshots, banners, and key art.",
+                        "maxLength": 24,
+                        "items": { "type": "ref", "ref": "#mediaItem" }
+                    },
+                    "trailers": {
+                        "type": "array",
+                        "description": "Video trailers or gameplay clips.",
+                        "maxLength": 8,
+                        "items": { "type": "ref", "ref": "#video" }
+                    },
+                    "developer": {
+                        "type": "ref",
+                        "ref": "#party",
+                        "description": "The studio or person who made this. Set developer.did whenever the developer's account is known — it is the durable identity anchor used to resolve their current handle and to authorize claiming this record; developer.name/url are display text only and are not trusted for identity."
+                    },
+
+                    "claimAllowed": {
+                        "type": "array",
+                        "description": "Extra accounts (DIDs and/or handles) allowed to claim this record besides developer.did, for records held on a developer's behalf (e.g. by atmosphere.games) before they publish their own. Prefer DIDs — handles are resolved best-effort and go stale if the account renames.",
+                        "maxLength": 12,
+                        "items": { "type": "string", "maxLength": 128 }
+                    },
+
+                    "status": {
+                        "type": "string",
+                        "knownValues": ["live", "beta", "coming", "archived"],
+                        "description": "Current availability."
+                    },
+                    "releasedAt": {
+                        "type": "string",
+                        "format": "datetime",
+                        "description": "When this became available."
+                    },
+
+                    "requires": {
+                        "type": "array",
+                        "description": "Hard gates. Every rule must pass before a player can use this game.",
+                        "maxLength": 16,
+                        "items": { "type": "ref", "ref": "#rule" }
+                    },
+                    "uses": {
+                        "type": "array",
+                        "description": "Other records this game reads or writes. Not required to play.",
+                        "maxLength": 32,
+                        "items": { "type": "ref", "ref": "#recordUse" }
+                    },
+
+                    "catalog": {
+                        "type": "array",
+                        "description": "Links to matching entries in other game catalogs. Purely supplementary; never affects eligibility.",
+                        "maxLength": 8,
+                        "items": { "type": "ref", "ref": "#catalogRef" }
+                    },
+
+                    "createdAt": { "type": "string", "format": "datetime" },
+                    "updatedAt": { "type": "string", "format": "datetime" }
+                }
+            }
         },
-        "label": { "type": "string", "maxLength": 120 },
-        "acquire": { "type": "string", "format": "uri" },
-        "purpose": { "type": "string", "maxLength": 300 },
-        "authority": { "type": "string", "format": "did" }
-      }
+
+        "party": {
+            "type": "object",
+            "description": "An entity associated with the experience, such as its developer.",
+            "required": ["name"],
+            "properties": {
+                "name": { "type": "string", "maxLength": 100, "description": "Display name. Cosmetic only — never used to authorize claims or credit; do not rely on it staying accurate after an account renames." },
+                "did": { "type": "string", "format": "did", "description": "DID of this entity's account, if it has one. This is the durable identity anchor: set it whenever known so the current handle can be resolved and kept fresh, and so the real developer can claim a held record." },
+                "url": { "type": "string", "format": "uri", "description": "Website." }
+            }
+        },
+
+        "mediaItem": {
+            "type": "object",
+            "description": "One image in the media gallery.",
+            "required": ["image"],
+            "properties": {
+                "image": {
+                    "type": "blob",
+                    "accept": ["image/png", "image/jpeg", "image/webp", "image/gif"],
+                    "maxSize": 8000000,
+                    "description": "The image blob."
+                },
+                "type": {
+                    "type": "string",
+                    "knownValues": ["screenshot", "banner", "artwork", "poster", "background", "logo", "thumbnail"],
+                    "description": "Kind of image."
+                },
+                "alt": { "type": "string", "maxLength": 300, "description": "Accessibility caption." },
+                "width": { "type": "integer", "description": "Pixel width, if known." },
+                "height": { "type": "integer", "description": "Pixel height, if known." }
+            }
+        },
+
+        "video": {
+            "type": "object",
+            "description": "A trailer or gameplay clip.",
+            "required": ["title"],
+            "properties": {
+                "title": { "type": "string", "maxLength": 120, "description": "Clip title." },
+                "platform": { "type": "string", "knownValues": ["youtube", "vimeo", "twitch", "direct"], "description": "Where the video lives." },
+                "videoId": { "type": "string", "maxLength": 120, "description": "Platform video id." },
+                "url": { "type": "string", "format": "uri", "description": "Direct URL, used when no platform/videoId is given." },
+                "thumbnail": { "type": "blob", "accept": ["image/png", "image/jpeg", "image/webp"], "maxSize": 2000000, "description": "Still frame shown before playing." }
+            }
+        },
+
+        "rule": {
+            "type": "object",
+            "description": "One playability rule. 'check' selects the variant: record, field, matches, vouch, all, any, or not. A rule may include verify for an additional required proof. An unknown check must never pass.",
+            "required": ["check"],
+            "properties": {
+                "check": { "type": "string", "knownValues": ["record", "field", "matches", "vouch", "all", "any", "not"], "description": "Rule type." },
+                "nsid": { "type": "string", "format": "nsid", "description": "Collection to read." },
+                "rkey": { "type": "string", "maxLength": 50, "description": "Record key. For field checks, omitted means 'self'; for record, matches, and vouch checks, omitted means 'any'. Explicit 'any' scans the collection." },
+                "field": { "type": "string", "maxLength": 200, "description": "Dot-path to test." },
+                "op": { "type": "string", "knownValues": ["exists", "notExists", "isPlayer", "eq", "neq", "gt", "gte", "lt", "lte"], "description": "Comparison operator." },
+                "value": { "type": "unknown", "description": "Comparison value." },
+                "authority": { "type": "string", "format": "did", "description": "DID of the trusted issuer, for vouch." },
+                "filters": { "type": "array", "minLength": 1, "maxLength": 8, "items": { "type": "ref", "ref": "#filter" }, "description": "Conditions for matches or vouch." },
+                "rules": { "type": "array", "minLength": 1, "maxLength": 16, "items": { "type": "ref", "ref": "#rule" }, "description": "Nested rules for all/any." },
+                "rule": { "type": "ref", "ref": "#rule", "description": "Nested rule for not." },
+                "label": { "type": "string", "maxLength": 120, "description": "Why this is required." },
+                "acquire": { "type": "string", "format": "uri", "description": "Where to get this." },
+                "verify": { "type": "ref", "ref": "#rule", "description": "Additional proof that must also pass when this rule is used in requires[]." }
+            }
+        },
+
+        "record": {
+            "type": "object",
+            "description": "Passes if the player holds a record in this collection at the selected key. An omitted key or 'any' scans the collection.",
+            "required": ["check", "nsid"],
+            "properties": {
+                "check":   { "type": "string", "const": "record" },
+                "nsid":    { "type": "string", "format": "nsid", "description": "Collection to check." },
+                "rkey":   { "type": "string", "maxLength": 50, "description": "Optional record key. Omitted or 'any' scans the collection; 'self' or another key checks only that record." },
+                "label":   { "type": "string", "maxLength": 120, "description": "Why this is required." },
+                "acquire": { "type": "string", "format": "uri", "description": "Where to get this." }
+            }
+        },
+
+        "field": {
+            "type": "object",
+            "description": "Passes if a field on the player's record meets a condition.",
+            "required": ["check", "nsid", "field", "op"],
+            "properties": {
+                "check": { "type": "string", "const": "field" },
+                "nsid":  { "type": "string", "format": "nsid" },
+                "rkey": { "type": "string", "maxLength": 50, "description": "Record key. Defaults to 'self'; 'any' scans the collection." },
+                "field": { "type": "string", "maxLength": 200, "description": "Dot-path to the property to test." },
+                "op": { "type": "string", "knownValues": ["exists", "notExists", "isPlayer", "eq", "neq", "gt", "gte", "lt", "lte"], "description": "Comparison operator." },
+                "value": { "type": "unknown", "description": "Comparison value." },
+                "label":   { "type": "string", "maxLength": 120 },
+                "acquire": { "type": "string", "format": "uri" }
+            }
+        },
+
+        "matches": {
+            "type": "object",
+            "description": "Passes if one record satisfies all filters.",
+            "required": ["check", "nsid", "filters"],
+            "properties": {
+                "check": { "type": "string", "const": "matches" },
+                "nsid":  { "type": "string", "format": "nsid" },
+                "rkey": { "type": "string", "maxLength": 50, "description": "Optional record key. Omitted or 'any' scans the collection; 'self' or another key checks only that record." },
+                "filters": {
+                    "type": "array",
+                    "description": "All filters must match on the same record.",
+                    "minLength": 1,
+                    "maxLength": 8,
+                    "items": { "type": "ref", "ref": "#filter" }
+                },
+                "label":   { "type": "string", "maxLength": 120 },
+                "acquire": { "type": "string", "format": "uri" }
+            }
+        },
+
+        "vouch": {
+            "type": "object",
+            "description": "Passes if a trusted authority's repo holds a matching record. Use for grants, awards, or approvals one account issues about another.",
+            "required": ["check", "authority", "nsid", "filters"],
+            "properties": {
+                "check": { "type": "string", "const": "vouch" },
+                "authority": { "type": "string", "format": "did", "description": "DID of the account that issues the record." },
+                "nsid": { "type": "string", "format": "nsid", "description": "Collection to look for in the authority's repo." },
+                "rkey": { "type": "string", "maxLength": 50, "description": "Optional record key in the authority's repo. Omitted or 'any' scans the collection; 'self' or another key checks only that record." },
+                "filters": {
+                    "type": "array",
+                    "description": "Conditions the record must meet. Use 'isPlayer' to require it name the signed-in player.",
+                    "minLength": 1,
+                    "maxLength": 8,
+                    "items": { "type": "ref", "ref": "#filter" }
+                },
+                "label":   { "type": "string", "maxLength": 120 },
+                "acquire": { "type": "string", "format": "uri" }
+            }
+        },
+
+        "all": {
+            "type": "object",
+            "description": "Passes only when every rule passes.",
+            "required": ["check", "rules"],
+            "properties": {
+                "check": { "type": "string", "const": "all" },
+                "rules": { "type": "array", "minLength": 1, "maxLength": 16, "items": { "type": "ref", "ref": "#rule" } },
+                "label":   { "type": "string", "maxLength": 120 },
+                "acquire": { "type": "string", "format": "uri" }
+            }
+        },
+
+        "any": {
+            "type": "object",
+            "description": "Passes when at least one rule passes.",
+            "required": ["check", "rules"],
+            "properties": {
+                "check": { "type": "string", "const": "any" },
+                "rules": { "type": "array", "minLength": 1, "maxLength": 16, "items": { "type": "ref", "ref": "#rule" } },
+                "label":   { "type": "string", "maxLength": 120 },
+                "acquire": { "type": "string", "format": "uri" }
+            }
+        },
+
+        "not": {
+            "type": "object",
+            "description": "Passes only when the nested rule fails.",
+            "required": ["check", "rule"],
+            "properties": {
+                "check": { "type": "string", "const": "not" },
+                "rule":  { "type": "ref", "ref": "#rule" },
+                "label": { "type": "string", "maxLength": 120 }
+            }
+        },
+
+        "filter": {
+            "type": "object",
+            "description": "One field condition, used by matches and vouch. 'isPlayer' passes when the field names the signed-in player.",
+            "required": ["field", "op"],
+            "properties": {
+                "field": { "type": "string", "maxLength": 200, "description": "Dot-path to the field." },
+                "op": { "type": "string", "knownValues": ["exists", "notExists", "isPlayer", "eq", "neq", "gt", "gte", "lt", "lte"], "description": "Comparison operator." },
+                "value": { "type": "unknown", "description": "Comparison value." }
+            }
+        },
+
+        "recordUse": {
+            "type": "object",
+            "description": "An optional record this game reads or writes. Never gates play; use requires[] for hard gates.",
+            "required": ["role", "nsid"],
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "knownValues": ["character", "perk", "cosmetic", "interop", "stats", "activity", "leaderboard", "profile", "session", "inventory", "other"],
+                    "description": "What this record is used for."
+                },
+                "nsid": { "type": "string", "format": "nsid", "description": "Collection to read." },
+                "rkey": { "type": "string", "maxLength": 50, "description": "Record key. Defaults to 'self'; 'any' scans the collection." },
+                "path": { "type": "string", "maxLength": 200, "description": "Dot-path to the relevant value inside the record." },
+                "authority": { "type": "string", "format": "did", "description": "DID of the repo holding this record, if not the player's own." },
+                "filters": { "type": "array", "maxLength": 8, "items": { "type": "ref", "ref": "#filter" }, "description": "Conditions to match, used with rkey 'any' or an authority." },
+                "label": { "type": "string", "maxLength": 120, "description": "Short label for this use." },
+                "purpose": { "type": "string", "maxLength": 300, "description": "Why this record matters." },
+                "acquire": { "type": "string", "format": "uri", "description": "Where to create or manage this record." },
+                "verify": { "type": "ref", "ref": "#rule", "description": "Optional rule confirming this use is genuine." }
+            }
+        },
+
+        "catalogRef": {
+            "type": "object",
+            "description": "A reference to a matching entry in another AT Protocol game catalog. Purely supplementary; never affects eligibility.",
+            "required": ["uri"],
+            "properties": {
+                "uri":    { "type": "string", "format": "at-uri", "description": "AT-URI of the external catalog record." },
+                "source": { "type": "string", "maxLength": 60, "description": "Short name of the catalog (e.g. cartridge.dev, gamesgamesgamesgames.games)." },
+                "name":   { "type": "string", "maxLength": 100, "description": "Display name of the referenced entry." }
+            }
+        }
+
     }
-  }
 }
