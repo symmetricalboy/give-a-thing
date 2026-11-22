@@ -8,9 +8,9 @@ Every day (resetting at **00:00 UTC**), every player clicks a button to get **on
 
 ## Architecture Highlights
 
-- **Immutable Genesis in App PDS (`@giveathing.com`)**: Canonical `com.giveathing.thing` and `com.giveathing.ledgerEntry` records live in Give a Thing's official ATProtocol repository so no player can ever delete or alter a thing once created.
+- **Immutable Genesis in App PDS (`@giveathing.com`)**: Canonical `com.giveathing.thing` and `com.giveathing.ledger` records live in Give a Thing's official ATProtocol repository so no player can ever delete or alter a thing once created.
 - **ATmosphere Games Directory Indexing (`games.atmosphere.define`)**: Automatically publishes `at://<app_did>/games.atmosphere.define/giveathing` so Give a Thing is indexed in the `atmosphere.games` game library.
-- **Decentralized Player Collections & Top 8 Favorites**: Every player (including original discoverers) receives `com.giveathing.holding` records in their own PDS, showcases everything they own on `/u/[handle]` with a **Featured Top 8** display at the top, signs `com.giveathing.transfer` / `com.giveathing.offer` / `com.giveathing.claim` records, and keeps portable `com.giveathing.graph.follow` edges.
+- **Decentralized Player Collections & Top 8 Favorites**: Every player (including original discoverers) receives `com.giveathing.holding` records in their own PDS, showcases everything they own on `/u/[handle]` with `com.giveathing.favorite` records powering their **Featured Top 8** display at the top, signs `com.giveathing.transfer` / `com.giveathing.offer` / `com.giveathing.claim` records, and keeps portable `com.giveathing.graph.follow` edges.
 - **Minimal OAuth Scopes + Composer Intent**: Requests only `com.giveathing.*` + `blob:image/png` scopes. Non-user Bluesky gift invites use `bsky.app/intent/compose` with dynamic `1200×630` OpenGraph cards and a 24-hour escrow revocation lock.
 - **Unlimited Pulls for `@giveathing.com`**: Signing in as `@giveathing.com` unlocks unlimited pulls with no once-a-day cap for testing.
 - **Bluesky Avatar Asset**: Circle-crop-safe `1024×1024` pixel avatar PNG is located at `public/avatar.png` (and served at `/avatar.png`).

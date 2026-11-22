@@ -1,10 +1,62 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import sharp from "sharp";
 import { getDb, schema } from "@/db";
-import { putUserHoldingOnPds } from "@/lib/atproto/user-pds";
+import {
+  deleteUserFavoriteOnPds,
+  putUserFavoriteOnPds,
+  putUserHoldingOnPds,
+} from "@/lib/atproto/user-pds";
 import type { ProvenanceHop, StrongRef } from "@/lib/lexicons";
 
 export const MAX_TOP_THINGS = 8;
+
+function buildThingRefFromRow(thingRow: {
+  thingTid: string;
+  discovererDid: string;
+  canonicalAtUri: string | null;
+  canonicalAtCid: string | null;
+}): StrongRef {
+  return {
+    uri:
+      thingRow.canonicalAtUri ??
+      `at://${process.env.NEXT_PUBLIC_APP_ATPROTO_DID || thingRow.discovererDid}/com.giveathing.thing/${thingRow.thingTid}`,
+    cid: thingRow.canonicalAtCid ?? `bafkrei${thingRow.thingTid}`,
+  };
+}
+
+export async function syncUserFavoritesCollectionToPds(
+  userDid: string
+): Promise<void> {
+  const db = getDb();
+  const favRows = await db
+    .select()
+    .from(schema.userFavoriteThings)
+    .where(eq(schema.userFavoriteThings.userDid, userDid))
+    .orderBy(asc(schema.userFavoriteThings.slot));
+
+  if (favRows.length === 0) return;
+
+  const tids = favRows.map((f) => f.thingTid);
+  const thingRows = await db
+    .select()
+    .from(schema.things)
+    .where(inArray(schema.things.thingTid, tids));
+  const thingMap = new Map(thingRows.map((t) => [t.thingTid, t]));
+
+  for (const fav of favRows) {
+    const thingRow = thingMap.get(fav.thingTid);
+    if (!thingRow || thingRow.currentOwnerDid !== userDid) continue;
+    await putUserFavoriteOnPds({
+      userDid,
+      thingTid: fav.thingTid,
+      thingRef: buildThingRefFromRow(thingRow),
+      slot: fav.slot,
+      catalogNumber: thingRow.catalogNumber,
+      name: thingRow.name,
+      createdAtIso: fav.createdAt.toISOString(),
+    });
+  }
+}
 
 async function syncHoldingFavoriteSlotToPds(
   ownerDid: string,
@@ -129,6 +181,8 @@ export async function toggleFavoriteThing(params: {
         )
       );
     await compactUserFavoriteSlots(params.userDid);
+    void deleteUserFavoriteOnPds(params.userDid, params.thingTid).catch(() => {});
+    void syncUserFavoritesCollectionToPds(params.userDid).catch(() => {});
     void syncHoldingFavoriteSlotToPds(params.userDid, params.thingTid, null).catch(
       () => {}
     );
@@ -142,11 +196,23 @@ export async function toggleFavoriteThing(params: {
   }
 
   const newSlot = currentFavs.length + 1;
+  const createdAt = new Date();
   await db.insert(schema.userFavoriteThings).values({
     userDid: params.userDid,
     thingTid: params.thingTid,
     slot: newSlot,
+    createdAt,
   });
+
+  void putUserFavoriteOnPds({
+    userDid: params.userDid,
+    thingTid: params.thingTid,
+    thingRef: buildThingRefFromRow(thingRow),
+    slot: newSlot,
+    catalogNumber: thingRow.catalogNumber,
+    name: thingRow.name,
+    createdAtIso: createdAt.toISOString(),
+  }).catch(() => {});
 
   void syncHoldingFavoriteSlotToPds(
     params.userDid,
@@ -197,6 +263,8 @@ export async function reorderFavoriteThing(params: {
         eq(schema.userFavoriteThings.thingTid, neighbor.thingTid)
       )
     );
+
+  void syncUserFavoritesCollectionToPds(params.userDid).catch(() => {});
 }
 
 export async function removeFavoriteOnTransfer(
@@ -204,13 +272,18 @@ export async function removeFavoriteOnTransfer(
   thingTid: string
 ): Promise<void> {
   const db = getDb();
-  await db
+  const deleted = await db
     .delete(schema.userFavoriteThings)
     .where(
       and(
         eq(schema.userFavoriteThings.userDid, formerOwnerDid),
         eq(schema.userFavoriteThings.thingTid, thingTid)
       )
-    );
+    )
+    .returning();
   await compactUserFavoriteSlots(formerOwnerDid);
+  if (deleted.length > 0) {
+    void deleteUserFavoriteOnPds(formerOwnerDid, thingTid).catch(() => {});
+    void syncUserFavoritesCollectionToPds(formerOwnerDid).catch(() => {});
+  }
 }

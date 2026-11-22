@@ -294,6 +294,105 @@ export async function deleteUserFollowOnPds(
   }
 }
 
+export interface PutUserFavoriteParams {
+  userDid: string;
+  thingTid: string;
+  thingRef: StrongRef;
+  slot: number;
+  catalogNumber?: number;
+  name?: string;
+  createdAtIso: string;
+}
+
+/**
+ * Publishes or updates `com.giveathing.favorite/<thingTid>` in the player's own PDS
+ * for their profile Top 8 featured showcase.
+ */
+export async function putUserFavoriteOnPds(
+  params: PutUserFavoriteParams,
+  enqueueIfOffline = true
+): Promise<StrongRef | null> {
+  const agent = await getUserAgent(params.userDid);
+  if (!agent) {
+    if (enqueueIfOffline) {
+      await enqueuePendingPdsSync(
+        params.userDid,
+        "put_favorite",
+        params.thingTid,
+        {
+          thingTid: params.thingTid,
+          thingRef: params.thingRef,
+          slot: params.slot,
+          catalogNumber: params.catalogNumber,
+          name: params.name,
+          createdAtIso: params.createdAtIso,
+        }
+      );
+    }
+    return null;
+  }
+
+  try {
+    const res = await agent.com.atproto.repo.putRecord({
+      repo: params.userDid,
+      collection: LEXICON_NSIDS.FAVORITE,
+      rkey: params.thingTid,
+      record: {
+        $type: LEXICON_NSIDS.FAVORITE,
+        thing: params.thingRef,
+        slot: params.slot,
+        ...(params.catalogNumber ? { catalogNumber: params.catalogNumber } : {}),
+        ...(params.name ? { name: params.name } : {}),
+        createdAt: params.createdAtIso,
+      },
+    });
+    return { uri: res.data.uri, cid: res.data.cid };
+  } catch (err) {
+    if (enqueueIfOffline) {
+      await enqueuePendingPdsSync(
+        params.userDid,
+        "put_favorite",
+        params.thingTid,
+        {
+          thingTid: params.thingTid,
+          thingRef: params.thingRef,
+          slot: params.slot,
+          catalogNumber: params.catalogNumber,
+          name: params.name,
+          createdAtIso: params.createdAtIso,
+        }
+      );
+    }
+    console.warn("[user-pds] putUserFavoriteOnPds deferred:", err);
+    return null;
+  }
+}
+
+export async function deleteUserFavoriteOnPds(
+  userDid: string,
+  thingTid: string,
+  enqueueIfOffline = true
+): Promise<void> {
+  const agent = await getUserAgent(userDid);
+  if (!agent) {
+    if (enqueueIfOffline) {
+      await enqueuePendingPdsSync(userDid, "delete_favorite", thingTid, {
+        thingTid,
+      });
+    }
+    return;
+  }
+  try {
+    await agent.com.atproto.repo.deleteRecord({
+      repo: userDid,
+      collection: LEXICON_NSIDS.FAVORITE,
+      rkey: thingTid,
+    });
+  } catch (err) {
+    console.warn("[user-pds] deleteUserFavoriteOnPds warning:", err);
+  }
+}
+
 async function enqueuePendingPdsSync(
   targetDid: string,
   action: string,
@@ -393,6 +492,54 @@ export async function flushPendingPdsSyncsForUser(did: string): Promise<void> {
         await agent.com.atproto.repo.deleteRecord({
           repo: did,
           collection: LEXICON_NSIDS.HOLDING,
+          rkey: job.thingTid,
+        });
+      } else if (job.action === "put_favorite" && job.thingTid) {
+        const [thingRow, favRow] = await Promise.all([
+          db
+            .select()
+            .from(schema.things)
+            .where(eq(schema.things.thingTid, job.thingTid))
+            .limit(1)
+            .then((r) => r[0]),
+          db
+            .select()
+            .from(schema.userFavoriteThings)
+            .where(
+              and(
+                eq(schema.userFavoriteThings.userDid, did),
+                eq(schema.userFavoriteThings.thingTid, job.thingTid)
+              )
+            )
+            .limit(1)
+            .then((r) => r[0]),
+        ]);
+
+        if (thingRow && thingRow.currentOwnerDid === did && favRow) {
+          const p = job.payload as {
+            thingRef: StrongRef;
+            createdAtIso?: string;
+          };
+          const ref = await putUserFavoriteOnPds(
+            {
+              userDid: did,
+              thingTid: job.thingTid,
+              thingRef: p.thingRef,
+              slot: favRow.slot,
+              catalogNumber: thingRow.catalogNumber,
+              name: thingRow.name,
+              createdAtIso: p.createdAtIso ?? favRow.createdAt.toISOString(),
+            },
+            false
+          );
+          if (!ref) {
+            throw new Error("Could not sync com.giveathing.favorite yet.");
+          }
+        }
+      } else if (job.action === "delete_favorite" && job.thingTid) {
+        await agent.com.atproto.repo.deleteRecord({
+          repo: did,
+          collection: LEXICON_NSIDS.FAVORITE,
           rkey: job.thingTid,
         });
       }

@@ -3,8 +3,9 @@ import { z } from "zod";
 
 export const LEXICON_NSIDS = {
   THING: "com.giveathing.thing",
-  LEDGER_ENTRY: "com.giveathing.ledgerEntry",
+  LEDGER: "com.giveathing.ledger",
   HOLDING: "com.giveathing.holding",
+  FAVORITE: "com.giveathing.favorite",
   TRANSFER: "com.giveathing.transfer",
   OFFER: "com.giveathing.offer",
   CLAIM: "com.giveathing.claim",
@@ -17,6 +18,7 @@ export const ATMOSPHERE_GAME_RKEY = "giveathing";
 export const USER_OAUTH_SCOPES = [
   "atproto",
   `repo:${LEXICON_NSIDS.HOLDING}`,
+  `repo:${LEXICON_NSIDS.FAVORITE}`,
   `repo:${LEXICON_NSIDS.TRANSFER}`,
   `repo:${LEXICON_NSIDS.OFFER}`,
   `repo:${LEXICON_NSIDS.CLAIM}`,
@@ -76,8 +78,8 @@ export const ThingRecordSchema = z.object({
   createdAt: z.string(),
 });
 
-export const LedgerEntryRecordSchema = z.object({
-  $type: z.literal(LEXICON_NSIDS.LEDGER_ENTRY),
+export const LedgerRecordSchema = z.object({
+  $type: z.literal(LEXICON_NSIDS.LEDGER),
   thing: StrongRefSchema,
   prevEntry: StrongRefSchema.optional(),
   sequenceNum: z.number().int().min(0),
@@ -87,6 +89,15 @@ export const LedgerEntryRecordSchema = z.object({
   note: z.string().max(140).optional(),
   userProof: StrongRefSchema.optional(),
   occurredAt: z.string(),
+});
+
+export const FavoriteRecordSchema = z.object({
+  $type: z.literal(LEXICON_NSIDS.FAVORITE),
+  thing: StrongRefSchema,
+  slot: z.number().int().min(1).max(8),
+  catalogNumber: z.number().int().min(1).optional(),
+  name: z.string().min(1).max(240).optional(),
+  createdAt: z.string(),
 });
 
 export const HoldingRecordSchema = z.object({
@@ -310,14 +321,29 @@ export function buildAtmosphereDefineRecord(params: {
         nsid: LEXICON_NSIDS.HOLDING,
         rkey: "any",
         role: "inventory",
-        label: "Things Owned & Top 8 Showcase",
+        label: "Things Owned",
         acquire: `${cleanUrl}/bag`,
         purpose:
-          "Active possession records in each player's PDS for every pointless 16-bit thing they hold, including provenance hops and Top 8 profile showcase slots.",
+          "Active possession records in each player's PDS for every pointless 16-bit thing they currently hold, including provenance hops.",
         verify: {
           check: "record",
           nsid: LEXICON_NSIDS.HOLDING,
           label: "Holds at least one thing in their bag",
+          acquire: cleanUrl,
+        },
+      },
+      {
+        nsid: LEXICON_NSIDS.FAVORITE,
+        rkey: "any",
+        role: "profile",
+        label: "Profile Top 8 Favorite Things",
+        acquire: cleanUrl,
+        purpose:
+          "Features up to 8 favorite owned things at the top of a player's profile, stored in their PDS.",
+        verify: {
+          check: "record",
+          nsid: LEXICON_NSIDS.FAVORITE,
+          label: "Features a favorite thing on their profile",
           acquire: cleanUrl,
         },
       },
@@ -345,7 +371,7 @@ export function buildAtmosphereDefineRecord(params: {
         },
       },
       {
-        nsid: LEXICON_NSIDS.LEDGER_ENTRY,
+        nsid: LEXICON_NSIDS.LEDGER,
         rkey: "any",
         role: "activity",
         authority: params.repoDid,

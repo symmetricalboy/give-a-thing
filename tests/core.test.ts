@@ -14,8 +14,9 @@ import { processInto16BitSprite } from "../src/lib/generator/pixel-art";
 import {
   AtmosphereDefineRecordSchema,
   buildAtmosphereDefineRecord,
+  FavoriteRecordSchema,
   HoldingRecordSchema,
-  LedgerEntryRecordSchema,
+  LedgerRecordSchema,
   LEXICON_NSIDS,
   nextTid,
   ThingRecordSchema,
@@ -160,8 +161,10 @@ describe("Give a Thing — Core Engine Verification", () => {
     });
     expect(validThing.catalogNumber).toBe(1);
 
-    const validLedger = LedgerEntryRecordSchema.parse({
-      $type: LEXICON_NSIDS.LEDGER_ENTRY,
+    expect(USER_OAUTH_SCOPES).toContain(`repo:${LEXICON_NSIDS.FAVORITE}`);
+
+    const validLedger = LedgerRecordSchema.parse({
+      $type: LEXICON_NSIDS.LEDGER,
       thing: {
         uri: `at://did:plc:app/${LEXICON_NSIDS.THING}/${tid1}`,
         cid: "bafkreitest",
@@ -174,6 +177,21 @@ describe("Give a Thing — Core Engine Verification", () => {
       occurredAt: "2026-11-22T01:00:00.000Z",
     });
     expect(validLedger.sequenceNum).toBe(1);
+    expect(validLedger.$type).toBe("com.giveathing.ledger");
+
+    const validFavorite = FavoriteRecordSchema.parse({
+      $type: LEXICON_NSIDS.FAVORITE,
+      thing: {
+        uri: `at://did:plc:app/${LEXICON_NSIDS.THING}/${tid1}`,
+        cid: "bafkreitest",
+      },
+      slot: 1,
+      catalogNumber: 1,
+      name: "Unreasonably Heavy Diner Mug",
+      createdAt: "2026-11-22T01:05:00.000Z",
+    });
+    expect(validFavorite.$type).toBe("com.giveathing.favorite");
+    expect(validFavorite.slot).toBe(1);
 
     const atmosphereRecord = buildAtmosphereDefineRecord({
       repoDid: "did:plc:giveathingapp",
@@ -199,7 +217,13 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(parsedAtmosphere.media).toBeUndefined();
     expect(parsedAtmosphere.requires?.length).toBe(1);
     expect(parsedAtmosphere.requires?.[0]?.nsid).toBe("app.bsky.actor.profile");
-    expect(parsedAtmosphere.uses?.length).toBe(8);
+    expect(parsedAtmosphere.uses?.length).toBe(9);
+    expect(
+      parsedAtmosphere.uses?.some((u) => u.nsid === "com.giveathing.ledger")
+    ).toBe(true);
+    expect(
+      parsedAtmosphere.uses?.some((u) => u.nsid === "com.giveathing.favorite")
+    ).toBe(true);
     expect(
       parsedAtmosphere.uses?.find((u) => u.nsid === "app.bsky.graph.follow")
         ?.acquire

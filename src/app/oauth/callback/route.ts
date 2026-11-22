@@ -8,6 +8,7 @@ import {
   importAllBlueskyFriends,
   onboardNewUserAutoFollows,
 } from "@/lib/social/follows";
+import { syncUserFavoritesCollectionToPds } from "@/lib/social/favorites";
 import { setSessionCookie } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
     void (async () => {
       try {
         await flushPendingPdsSyncsForUser(did);
+        await syncUserFavoritesCollectionToPds(did);
         if (isNewUser) {
           await onboardNewUserAutoFollows(did);
         } else if (existing[0]?.autoImportBskyFollows) {

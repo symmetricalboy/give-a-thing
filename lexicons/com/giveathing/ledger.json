@@ -1,10 +1,10 @@
 {
   "lexicon": 1,
-  "id": "com.giveathing.ledgerEntry",
+  "id": "com.giveathing.ledger",
   "defs": {
     "main": {
       "type": "record",
-      "description": "Immutable canonical provenance hop recorded in the official Give a Thing repository (@giveathing.com) whenever a Thing is pulled, gifted, or claimed.",
+      "description": "Immutable canonical provenance hop recorded in the official Give a Thing repository (@giveathing.com) whenever a thing is pulled, gifted, or claimed.",
       "key": "tid",
       "record": {
         "type": "object",
@@ -18,7 +18,7 @@
           "prevEntry": {
             "type": "ref",
             "ref": "com.atproto.repo.strongRef",
-            "description": "Strong reference to the previous ledgerEntry in this Thing's provenance chain."
+            "description": "Strong reference to the previous com.giveathing.ledger record in this thing's provenance chain."
           },
           "sequenceNum": {
             "type": "integer",

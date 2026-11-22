@@ -6,6 +6,7 @@ import { followPlayer } from "@/lib/social/follows";
 import { flushPendingPdsSyncsForUser } from "@/lib/atproto/user-pds";
 import {
   isAppPdsConfigured,
+  migrateLegacyLedgerRecordsOnAppPds,
   publishAtmosphereGameDefineOnAppPds,
 } from "@/lib/atproto/app-pds";
 
@@ -37,18 +38,24 @@ export function startBackgroundServices(): void {
 
   globalForBg.bgStarted = true;
 
-  // 1. Register or update games.atmosphere.define record on @giveathing.com PDS if configured
+  // 1. Migrate any legacy ledgerEntry records & update games.atmosphere.define on @giveathing.com PDS
   if (isAppPdsConfigured()) {
-    void publishAtmosphereGameDefineOnAppPds()
-      .then((ref) => {
-        if (ref) {
-          console.log(
-            `[atmosphere.games] Registered games.atmosphere.define: ${ref.uri}`
-          );
-        }
-      })
+    void migrateLegacyLedgerRecordsOnAppPds()
       .catch((err) => {
-        console.warn("[atmosphere.games] Startup publish warning:", err);
+        console.warn("[app-pds] Legacy ledger migration warning:", err);
+      })
+      .finally(() => {
+        void publishAtmosphereGameDefineOnAppPds()
+          .then((ref) => {
+            if (ref) {
+              console.log(
+                `[atmosphere.games] Registered games.atmosphere.define: ${ref.uri}`
+              );
+            }
+          })
+          .catch((err) => {
+            console.warn("[atmosphere.games] Startup publish warning:", err);
+          });
       });
   }
 

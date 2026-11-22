@@ -26,7 +26,7 @@ export function isAppPdsConfigured(): boolean {
 /**
  * Returns an authenticated AtpAgent connected to Give a Thing's official PDS
  * (`@giveathing.com`), where immutable canonical `com.giveathing.thing`,
- * `com.giveathing.ledgerEntry`, and `games.atmosphere.define` records live.
+ * `com.giveathing.ledger`, and `games.atmosphere.define` records live.
  */
 export async function getAppPdsAgent(): Promise<AtpAgent | null> {
   if (!isAppPdsConfigured()) {
@@ -129,7 +129,7 @@ export interface MintCanonicalThingResult {
 
 /**
  * Publishes the immutable genesis `com.giveathing.thing` record, sprite blob,
- * and `com.giveathing.ledgerEntry` (#0) to `@giveathing.com`'s official PDS.
+ * and `com.giveathing.ledger` (#0) to `@giveathing.com`'s official PDS.
  */
 export async function mintCanonicalThingOnAppPds(
   params: MintCanonicalThingParams
@@ -178,10 +178,10 @@ export async function mintCanonicalThingOnAppPds(
 
   const ledgerRes = await agent.com.atproto.repo.putRecord({
     repo,
-    collection: LEXICON_NSIDS.LEDGER_ENTRY,
+    collection: LEXICON_NSIDS.LEDGER,
     rkey: params.entryTid,
     record: {
-      $type: LEXICON_NSIDS.LEDGER_ENTRY,
+      $type: LEXICON_NSIDS.LEDGER,
       thing: thingStrongRef,
       sequenceNum: 0,
       owner: params.discoveredByDid,
@@ -220,10 +220,10 @@ export async function appendLedgerEntryOnAppPds(
 
   const res = await agent.com.atproto.repo.putRecord({
     repo: agent.session.did,
-    collection: LEXICON_NSIDS.LEDGER_ENTRY,
+    collection: LEXICON_NSIDS.LEDGER,
     rkey: params.entryTid,
     record: {
-      $type: LEXICON_NSIDS.LEDGER_ENTRY,
+      $type: LEXICON_NSIDS.LEDGER,
       thing: params.thingRef,
       ...(params.prevEntryRef ? { prevEntry: params.prevEntryRef } : {}),
       sequenceNum: params.sequenceNum,
@@ -239,6 +239,86 @@ export async function appendLedgerEntryOnAppPds(
   });
 
   return { uri: res.data.uri, cid: res.data.cid };
+}
+
+/**
+ * One-time idempotent migration of any early alpha `com.giveathing.ledgerEntry`
+ * records in `@giveathing.com`'s PDS over to `com.giveathing.ledger`.
+ */
+export async function migrateLegacyLedgerRecordsOnAppPds(): Promise<void> {
+  const agent = await getAppPdsAgent();
+  if (!agent || !agent.session) return;
+
+  const repo = agent.session.did;
+  const legacyCollection = "com.giveathing.ledgerEntry";
+  const db = getDb();
+
+  let cursor: string | undefined;
+  do {
+    const res = await agent.com.atproto.repo.listRecords({
+      repo,
+      collection: legacyCollection,
+      limit: 100,
+      cursor,
+    });
+    const records = res.data.records;
+    if (!records || records.length === 0) break;
+
+    for (const item of records) {
+      const rkey = item.uri.split("/").pop();
+      if (!rkey) continue;
+
+      const oldVal = item.value as Record<string, unknown>;
+      const prevEntry = oldVal.prevEntry as
+        | { uri?: string; cid?: string }
+        | undefined;
+      const migratedPrev =
+        prevEntry && typeof prevEntry.uri === "string"
+          ? {
+              ...prevEntry,
+              uri: prevEntry.uri.replace(
+                `/${legacyCollection}/`,
+                `/${LEXICON_NSIDS.LEDGER}/`
+              ),
+            }
+          : undefined;
+
+      const putRes = await agent.com.atproto.repo.putRecord({
+        repo,
+        collection: LEXICON_NSIDS.LEDGER,
+        rkey,
+        record: {
+          ...oldVal,
+          $type: LEXICON_NSIDS.LEDGER,
+          ...(migratedPrev ? { prevEntry: migratedPrev } : {}),
+        },
+      });
+
+      await db
+        .update(schema.provenanceEntries)
+        .set({
+          ledgerAtUri: putRes.data.uri,
+          ledgerAtCid: putRes.data.cid,
+        })
+        .where(eq(schema.provenanceEntries.entryTid, rkey));
+
+      await db
+        .update(schema.things)
+        .set({
+          latestLedgerAtUri: putRes.data.uri,
+          latestLedgerAtCid: putRes.data.cid,
+        })
+        .where(eq(schema.things.latestLedgerAtUri, item.uri));
+
+      await agent.com.atproto.repo.deleteRecord({
+        repo,
+        collection: legacyCollection,
+        rkey,
+      });
+    }
+
+    cursor = res.data.cursor;
+  } while (cursor);
 }
 
 /**

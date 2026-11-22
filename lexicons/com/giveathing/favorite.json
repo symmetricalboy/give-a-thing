@@ -1,0 +1,42 @@
+{
+  "lexicon": 1,
+  "id": "com.giveathing.favorite",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Features an owned thing in a player's profile Top 8 showcase. Stored in the player's own PDS keyed by the thing's TID and deleted if unfavorited or given away.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["thing", "slot", "createdAt"],
+        "properties": {
+          "thing": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong reference to the canonical com.giveathing.thing record."
+          },
+          "slot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "description": "Featured showcase position (1 through 8) on the player's profile."
+          },
+          "catalogNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Global discovery catalog number of the favorited thing."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "Display name of the favorited thing."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

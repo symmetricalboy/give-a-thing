@@ -101,7 +101,7 @@ export interface PullResultPayload {
  * 2. Samples an under-used `(MacroCategory, Subcategory, Twist)` seed.
  * 3. Runs `gemini-4-carbon` + 4-layer zero-duplicate verification (`canonical_fingerprint` + `gemini-embedding-2` HNSW).
  * 4. Renders & pixel-snaps a 16-bit RPG sprite with `gemini-nano-banana-2.1` + `sharp`.
- * 5. Mints immutable `com.giveathing.thing` & `com.giveathing.ledgerEntry` on `@giveathing.com`'s PDS,
+ * 5. Mints immutable `com.giveathing.thing` & `com.giveathing.ledger` on `@giveathing.com`'s PDS,
  *    and writes `com.giveathing.holding` to the discoverer's own PDS.
  */
 export async function executeDailyPull(
@@ -335,7 +335,7 @@ export async function executeDailyPull(
         },
       });
 
-    // Step 2: Publish canonical `com.giveathing.thing` + `com.giveathing.ledgerEntry` (#0) on App PDS
+    // Step 2: Publish canonical `com.giveathing.thing` + `com.giveathing.ledger` (#0) on App PDS
     let canonicalThingRef: StrongRef = {
       uri: `at://${process.env.NEXT_PUBLIC_APP_ATPROTO_DID || userDid}/com.giveathing.thing/${thingTid}`,
       cid: `bafkrei${thingTid}`,
