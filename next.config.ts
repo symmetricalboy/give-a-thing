@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     "sharp",
     "postgres",
     "@atproto/oauth-client-node",
+    "ws",
   ],
   images: {
     unoptimized: true,

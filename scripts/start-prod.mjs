@@ -16,33 +16,7 @@ async function main() {
     await runStep("npx", ["tsx", "scripts/migrate.ts"], "db:migrate");
   }
 
-  if (
-    process.env.DATABASE_URL &&
-    process.env.APP_ATPROTO_IDENTIFIER &&
-    process.env.APP_ATPROTO_PASSWORD
-  ) {
-    console.log("[startup] Ensuring games.atmosphere.define record is registered...");
-    spawn("npx", ["tsx", "scripts/register-atmosphere-game.ts"], {
-      stdio: "inherit",
-      env: process.env,
-    });
-  }
-
-  if (
-    process.env.DATABASE_URL &&
-    process.env.ENABLE_IN_PROCESS_WORKER !== "false"
-  ) {
-    console.log("[startup] Launching background ATProto Jetstream worker...");
-    const worker = spawn("npx", ["tsx", "scripts/worker.ts"], {
-      stdio: "inherit",
-      env: process.env,
-    });
-    worker.on("exit", (code) => {
-      console.warn(`[startup] Jetstream worker exited (${code}).`);
-    });
-  }
-
-  console.log("[startup] Starting Next.js standalone server...");
+  console.log("[startup] Starting Next.js standalone server (with Jetstream & ATmosphere sync)...");
   const server = spawn("node", [".next/standalone/server.js"], {
     stdio: "inherit",
     env: {
