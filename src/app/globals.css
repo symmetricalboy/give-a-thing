@@ -248,11 +248,21 @@ body {
 .rpg-tabpanel-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  align-items: start;
 
   & > [role="tabpanel"] {
     grid-area: 1 / 1;
     min-inline-size: 0;
     margin: 0;
+  }
+
+  & > [role="tabpanel"]:not([hidden]) {
+    position: relative;
+    z-index: 1;
+  }
+
+  & > [role="tabpanel"][hidden] {
+    pointer-events: none;
   }
 }
 

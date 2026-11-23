@@ -4,22 +4,33 @@ import React, { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Backpack,
+  Coins,
   ExternalLink,
+  Gift,
   Package,
+  PackageOpen,
   Search,
   Sparkles,
   UserCheck,
   UserPlus,
   Users,
 } from "lucide-react";
-import type { DirectoryUserCard, ThingCardItem } from "@/lib/queries";
-import { MACRO_CATEGORIES } from "@/lib/generator/categories";
+import type {
+  DirectoryCollectionCard,
+  DirectoryUserCard,
+  ThingCardItem,
+} from "@/lib/queries";
+import { formatUsdCents } from "@/lib/stripe/pricing";
 import { ThingGridCard } from "./ThingGridCard";
 import { GiveThingModal } from "./GiveThingModal";
+
+type SearchMode = "things" | "collections" | "users";
 
 interface CatalogBrowserProps {
   initialItems: ThingCardItem[];
   initialTotalCount: number;
+  initialCollections: DirectoryCollectionCard[];
+  initialTotalCollectionsCount: number;
   initialUsers: DirectoryUserCard[];
   initialTotalUsersCount: number;
   viewerDid: string | null;
@@ -28,28 +39,48 @@ interface CatalogBrowserProps {
 export function CatalogBrowser({
   initialItems,
   initialTotalCount,
+  initialCollections,
+  initialTotalCollectionsCount,
   initialUsers,
   initialTotalUsersCount,
   viewerDid,
 }: CatalogBrowserProps) {
   const thingSearchInputId = useId();
+  const collectionSearchInputId = useId();
   const userSearchInputId = useId();
+
   const thingsTabId = useId();
+  const collectionsTabId = useId();
   const usersTabId = useId();
+
+  const thingsTabRef = useRef<HTMLButtonElement>(null);
+  const collectionsTabRef = useRef<HTMLButtonElement>(null);
+  const usersTabRef = useRef<HTMLButtonElement>(null);
+
   const thingsPanelRef = useRef<HTMLDivElement>(null);
+  const collectionsPanelRef = useRef<HTMLDivElement>(null);
   const usersPanelRef = useRef<HTMLDivElement>(null);
 
-  const [activeMode, setActiveMode] = useState<"things" | "users">("things");
+  const [activeMode, setActiveMode] = useState<SearchMode>("things");
 
   // Things Search State
   const [items, setItems] = useState<ThingCardItem[]>(initialItems);
   const [totalCount, setTotalCount] = useState(initialTotalCount);
   const [query, setQuery] = useState("");
   const [semantic, setSemantic] = useState(false);
-  const [category, setCategory] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [giveTarget, setGiveTarget] = useState<ThingCardItem | null>(null);
+
+  // Collections Search State
+  const [collectionQuery, setCollectionQuery] = useState("");
+  const [collections, setCollections] =
+    useState<DirectoryCollectionCard[]>(initialCollections);
+  const [totalCollectionsCount, setTotalCollectionsCount] = useState(
+    initialTotalCollectionsCount
+  );
+  const [collectionPage, setCollectionPage] = useState(1);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
 
   // Users Search State
   const [userQuery, setUserQuery] = useState("");
@@ -69,40 +100,96 @@ export function CatalogBrowser({
 
   const pageSize = 24;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const totalCollectionPages = Math.max(
+    1,
+    Math.ceil(totalCollectionsCount / pageSize)
+  );
 
-  // Sync hidden="until-found" panels for browser find-in-page
+  // Sync hidden="until-found" panels for browser find-in-page + scroll selected tab into view
   useEffect(() => {
-    const tPanel = thingsPanelRef.current;
-    const uPanel = usersPanelRef.current;
-    if (!tPanel || !uPanel) return;
+    const panels: Array<[SearchMode, HTMLDivElement | null]> = [
+      ["things", thingsPanelRef.current],
+      ["collections", collectionsPanelRef.current],
+      ["users", usersPanelRef.current],
+    ];
 
-    if (activeMode === "things") {
-      tPanel.removeAttribute("hidden");
-      uPanel.setAttribute("hidden", "until-found");
-    } else {
-      uPanel.removeAttribute("hidden");
-      tPanel.setAttribute("hidden", "until-found");
+    const cleanups: Array<() => void> = [];
+    for (const [mode, panel] of panels) {
+      if (!panel) continue;
+      if (mode === activeMode) {
+        panel.removeAttribute("hidden");
+      } else {
+        panel.setAttribute("hidden", "until-found");
+      }
+      const onMatch = () => setActiveMode(mode);
+      panel.addEventListener("beforematch", onMatch);
+      cleanups.push(() => panel.removeEventListener("beforematch", onMatch));
     }
 
-    const onThingsMatch = () => setActiveMode("things");
-    const onUsersMatch = () => setActiveMode("users");
-    tPanel.addEventListener("beforematch", onThingsMatch);
-    uPanel.addEventListener("beforematch", onUsersMatch);
+    const activeTabEl =
+      activeMode === "things"
+        ? thingsTabRef.current
+        : activeMode === "collections"
+          ? collectionsTabRef.current
+          : usersTabRef.current;
+    activeTabEl?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      container: "nearest",
+    } as ScrollIntoViewOptions);
+
     return () => {
-      tPanel.removeEventListener("beforematch", onThingsMatch);
-      uPanel.removeEventListener("beforematch", onUsersMatch);
+      for (const fn of cleanups) fn();
     };
   }, [activeMode]);
+
+  function selectTab(mode: SearchMode, focusTab = false) {
+    setActiveMode(mode);
+    if (mode === "collections" && !collectionQuery.trim() && query.trim()) {
+      setCollectionQuery(query);
+      setCollectionPage(1);
+      void runCollectionSearch({ q: query, p: 1 });
+    } else if (mode === "users" && !userQuery.trim() && query.trim()) {
+      setUserQuery(query);
+      void runUserSearch(query);
+    }
+
+    if (focusTab) {
+      const ref =
+        mode === "things"
+          ? thingsTabRef.current
+          : mode === "collections"
+            ? collectionsTabRef.current
+            : usersTabRef.current;
+      ref?.focus();
+    }
+  }
+
+  function handleTabKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const order: SearchMode[] = ["things", "collections", "users"];
+    const idx = order.indexOf(activeMode);
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      selectTab(order[(idx + 1) % order.length]!, true);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      selectTab(order[(idx - 1 + order.length) % order.length]!, true);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      selectTab(order[0]!, true);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      selectTab(order[order.length - 1]!, true);
+    }
+  }
 
   async function runQuery(overrides?: {
     q?: string;
     sem?: boolean;
-    cat?: string;
     p?: number;
   }) {
     const qVal = overrides?.q ?? query;
     const semVal = overrides?.sem ?? semantic;
-    const catVal = overrides?.cat ?? category;
     const pageVal = overrides?.p ?? page;
 
     setLoading(true);
@@ -110,7 +197,6 @@ export function CatalogBrowser({
       const url = new URL("/api/catalog", window.location.origin);
       if (qVal.trim()) url.searchParams.set("q", qVal.trim());
       if (semVal && qVal.trim()) url.searchParams.set("semantic", "1");
-      if (catVal) url.searchParams.set("category", catVal);
       url.searchParams.set("page", String(pageVal));
 
       const res = await fetch(url.toString());
@@ -123,6 +209,30 @@ export function CatalogBrowser({
       setTotalCount(data.totalCount);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runCollectionSearch(overrides?: { q?: string; p?: number }) {
+    const qVal = (overrides?.q ?? collectionQuery).trim();
+    const pageVal = overrides?.p ?? collectionPage;
+
+    setCollectionsLoading(true);
+    try {
+      const url = new URL("/api/collections/search", window.location.origin);
+      if (qVal) url.searchParams.set("q", qVal);
+      url.searchParams.set("page", String(pageVal));
+
+      const res = await fetch(url.toString());
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        collections?: DirectoryCollectionCard[];
+        totalCount?: number;
+      };
+      const list = data.collections ?? [];
+      setCollections(list);
+      setTotalCollectionsCount(data.totalCount ?? list.length);
+    } finally {
+      setCollectionsLoading(false);
     }
   }
 
@@ -189,40 +299,52 @@ export function CatalogBrowser({
               FIND THINGS
             </h1>
             <p className="text-xs text-[#cfc3e8] mt-0.5">
-              Search every unique pointless thing ordered by latest activity—or
-              look up players across Give a Thing.
+              Search every unique pointless thing, Mystery Box collection, or
+              player—ordered by most recent activity.
             </p>
           </div>
 
-          {/* Things vs Users Tablist */}
+          {/* Things / Collections / Users Tablist */}
           <div
             role="tablist"
             aria-label="Search mode"
+            onKeyDown={handleTabKeyDown}
             className="rpg-tablist"
           >
             <button
+              ref={thingsTabRef}
               type="button"
               role="tab"
               id={thingsTabId}
+              tabIndex={activeMode === "things" ? 0 : -1}
               aria-selected={activeMode === "things"}
-              onClick={() => setActiveMode("things")}
+              onClick={() => selectTab("things")}
               className="rpg-tab inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
             >
               <Package className="h-3.5 w-3.5" aria-hidden="true" />
               THINGS ({totalCount})
             </button>
             <button
+              ref={collectionsTabRef}
+              type="button"
+              role="tab"
+              id={collectionsTabId}
+              tabIndex={activeMode === "collections" ? 0 : -1}
+              aria-selected={activeMode === "collections"}
+              onClick={() => selectTab("collections")}
+              className="rpg-tab inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+            >
+              <PackageOpen className="h-3.5 w-3.5" aria-hidden="true" />
+              COLLECTIONS ({totalCollectionsCount})
+            </button>
+            <button
+              ref={usersTabRef}
               type="button"
               role="tab"
               id={usersTabId}
+              tabIndex={activeMode === "users" ? 0 : -1}
               aria-selected={activeMode === "users"}
-              onClick={() => {
-                setActiveMode("users");
-                if (!userQuery.trim() && query.trim()) {
-                  setUserQuery(query);
-                  void runUserSearch(query);
-                }
-              }}
+              onClick={() => selectTab("users")}
               className="rpg-tab inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
             >
               <Users className="h-3.5 w-3.5" aria-hidden="true" />
@@ -246,113 +368,90 @@ export function CatalogBrowser({
                 SEARCH THINGS
               </span>
 
-              {/* Search Form */}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  setPage(1);
-                  void runQuery({ p: 1 });
-                }}
-                className="flex flex-col gap-2.5 sm:flex-row"
-              >
-                <div className="relative flex-1">
-                  <label htmlFor={thingSearchInputId} className="sr-only">
-                    Search things
-                  </label>
-                  <input
-                    id={thingSearchInputId}
-                    type="search"
-                    placeholder={
-                      semantic
-                        ? "Describe a vibe (e.g. 'nostalgic 90s school desk clutter')..."
-                        : "Search by thing name, description, or category..."
-                    }
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        if (e.nativeEvent.isComposing || e.keyCode === 229) {
-                          e.preventDefault();
-                        }
-                      }
-                    }}
-                    className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !semantic;
-                    setSemantic(next);
-                    if (query.trim()) {
-                      setPage(1);
-                      void runQuery({ sem: next, p: 1 });
-                    }
+              <search>
+                <form
+                  action="/search"
+                  method="GET"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setPage(1);
+                    void runQuery({ p: 1 });
                   }}
-                  className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 font-pixel text-[10px] ${
-                    semantic
-                      ? "rpg-btn-blue"
-                      : "rpg-btn-secondary text-[#cfc3e8]"
-                  }`}
+                  className="flex flex-col gap-2.5 sm:flex-row"
                 >
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                  Vibe Search {semantic ? "ON" : "OFF"}
-                </button>
+                  <div className="relative flex-1">
+                    <label htmlFor={thingSearchInputId} className="sr-only">
+                      Search things
+                    </label>
+                    <input
+                      id={thingSearchInputId}
+                      name="q"
+                      type="search"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      placeholder={
+                        semantic
+                          ? "Describe a vibe (e.g. 'nostalgic 90s school desk clutter')..."
+                          : "Search by thing name, description, or flavor text..."
+                      }
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          if (e.nativeEvent.isComposing || e.keyCode === 229) {
+                            e.preventDefault();
+                          }
+                        }
+                      }}
+                      className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
+                    />
+                  </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rpg-btn-primary inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-pixel text-xs"
-                >
-                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                  {loading ? "Searching..." : "Search"}
-                </button>
-              </form>
+                  {query.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuery("");
+                        setPage(1);
+                        void runQuery({ q: "", p: 1 });
+                      }}
+                      className="rpg-btn-secondary px-4 py-2.5 font-pixel text-xs"
+                    >
+                      Clear
+                    </button>
+                  )}
 
-              {/* Category Pills */}
-              <details className="group">
-                <summary className="cursor-pointer font-pixel text-[11px] text-[#8ec8ff] hover:underline">
-                  {category
-                    ? `Filtering Category: ${category} (Click to change)`
-                    : "Browse by 30 Thing Categories"}
-                </summary>
-                <div className="pill-row mt-3 pt-2 border-t border-[#9e762a]/40">
                   <button
                     type="button"
                     onClick={() => {
-                      setCategory("");
-                      setPage(1);
-                      void runQuery({ cat: "", p: 1 });
+                      const next = !semantic;
+                      setSemantic(next);
+                      if (query.trim()) {
+                        setPage(1);
+                        void runQuery({ sem: next, p: 1 });
+                      }
                     }}
-                    className={`px-2.5 py-1 text-xs rounded ${
-                      category === ""
-                        ? "bg-[#ffd15c] font-semibold text-[#1f1204]"
-                        : "bg-[#160f24] text-[#cfc3e8] hover:text-[#fdf6e9]"
+                    className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 font-pixel text-[10px] ${
+                      semantic
+                        ? "rpg-btn-blue"
+                        : "rpg-btn-secondary text-[#cfc3e8]"
                     }`}
                   >
-                    All Categories
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    Vibe Search {semantic ? "ON" : "OFF"}
                   </button>
-                  {MACRO_CATEGORIES.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        setCategory(m.label);
-                        setPage(1);
-                        void runQuery({ cat: m.label, p: 1 });
-                      }}
-                      className={`px-2.5 py-1 text-xs rounded ${
-                        category === m.label
-                          ? "bg-[#4da6ff] font-semibold text-[#07162b]"
-                          : "bg-[#160f24] text-[#cfc3e8] hover:text-[#fdf6e9]"
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </details>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="rpg-btn-primary inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-pixel text-xs"
+                  >
+                    <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                    {loading ? "Searching..." : "Search"}
+                  </button>
+                </form>
+              </search>
             </div>
 
             {/* Things Results Grid */}
@@ -362,7 +461,7 @@ export function CatalogBrowser({
                   No Matching Things Found
                 </p>
                 <p className="text-sm text-[#cfc3e8]">
-                  Try clearing your filter—or head to{" "}
+                  Try clearing your search—or head to{" "}
                   <Link href="/get" className="text-[#ff99ac] underline">
                     GET A THING
                   </Link>{" "}
@@ -417,7 +516,276 @@ export function CatalogBrowser({
           </div>
         </div>
 
-        {/* Panel 2: Users Search */}
+        {/* Panel 2: Collections Search */}
+        <div
+          ref={collectionsPanelRef}
+          role="tabpanel"
+          aria-labelledby={collectionsTabId}
+          hidden
+        >
+          <div className="space-y-6">
+            <div className="rpg-panel p-5 sm:p-6 space-y-4">
+              <span className="font-pixel block text-xs text-[#ffd15c]">
+                SEARCH COLLECTIONS
+              </span>
+
+              <search>
+                <form
+                  action="/search"
+                  method="GET"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setCollectionPage(1);
+                    void runCollectionSearch({ p: 1 });
+                  }}
+                  className="flex flex-col gap-2.5 sm:flex-row"
+                >
+                  <div className="relative flex-1">
+                    <label
+                      htmlFor={collectionSearchInputId}
+                      className="sr-only"
+                    >
+                      Search collections by title, description, or creator
+                    </label>
+                    <input
+                      id={collectionSearchInputId}
+                      name="q"
+                      type="search"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      placeholder="Search collections by name, description, or @creator..."
+                      value={collectionQuery}
+                      onChange={(e) => setCollectionQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          if (e.nativeEvent.isComposing || e.keyCode === 229) {
+                            e.preventDefault();
+                          }
+                        }
+                      }}
+                      className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
+                    />
+                  </div>
+
+                  {collectionQuery.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCollectionQuery("");
+                        setCollectionPage(1);
+                        void runCollectionSearch({ q: "", p: 1 });
+                      }}
+                      className="rpg-btn-secondary px-4 py-2.5 font-pixel text-xs"
+                    >
+                      Clear
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={collectionsLoading}
+                    className="rpg-btn-primary inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-pixel text-xs"
+                  >
+                    <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                    {collectionsLoading ? "Searching..." : "Find Collections"}
+                  </button>
+                </form>
+              </search>
+            </div>
+
+            {collections.length === 0 ? (
+              <div className="rpg-panel-subtle p-10 text-center space-y-2">
+                <p className="font-pixel text-xs text-[#ffd15c]">
+                  No Matching Collections Found
+                </p>
+                <p className="text-sm text-[#cfc3e8]">
+                  Try clearing your search—or visit{" "}
+                  <Link href="/make" className="text-[#ff99ac] underline">
+                    MAKE NEW THINGS
+                  </Link>{" "}
+                  to publish your own Mystery Box collection!
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {collections.map((col) => {
+                  const isOpen = col.remainingCount > 0;
+                  const isPaid = col.priceCents > 0;
+
+                  return (
+                    <article
+                      key={col.collectionTid}
+                      className="rpg-panel-subtle min-w-0 flex flex-col justify-between p-5 space-y-4 transition-colors hover:border-[#ffd15c]"
+                    >
+                      <div className="space-y-3 min-w-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {isOpen ? (
+                              <span className="rounded bg-[#4be3a0]/20 px-2 py-0.5 font-pixel text-[9px] text-[#4be3a0]">
+                                OPEN &bull; {col.remainingCount}/{col.totalItems} LEFT
+                              </span>
+                            ) : (
+                              <span className="rounded bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff99ac]">
+                                SOLD OUT &bull; {col.totalItems} ITEMS
+                              </span>
+                            )}
+
+                            <span
+                              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 font-pixel text-[9px] ${
+                                isPaid
+                                  ? "bg-[#ffd15c]/20 text-[#ffd15c]"
+                                  : "bg-[#4da6ff]/20 text-[#8ec8ff]"
+                              }`}
+                            >
+                              {isPaid ? (
+                                <>
+                                  <Coins
+                                    className="h-2.5 w-2.5"
+                                    aria-hidden="true"
+                                  />
+                                  {formatUsdCents(col.priceCents)}
+                                </>
+                              ) : (
+                                <>
+                                  <Gift
+                                    className="h-2.5 w-2.5"
+                                    aria-hidden="true"
+                                  />
+                                  FREE
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 min-w-0">
+                          <h3 className="font-pixel text-xs sm:text-sm text-[#ffd15c] break-words">
+                            <Link
+                              href={`/collection/${encodeURIComponent(col.collectionTid)}`}
+                              className="hover:underline"
+                            >
+                              {col.name}
+                            </Link>
+                          </h3>
+
+                          <div className="flex items-center gap-2 text-xs text-[#cfc3e8]">
+                            {col.creator.avatarUrl ? (
+                              <img
+                                src={col.creator.avatarUrl}
+                                alt=""
+                                className="h-4 w-4 shrink-0 rounded-full border border-[#ffd15c]/50 object-cover"
+                              />
+                            ) : null}
+                            <span className="truncate">
+                              by{" "}
+                              <Link
+                                href={`/u/${encodeURIComponent(col.creator.handle)}`}
+                                className="text-[#8ec8ff] hover:underline"
+                              >
+                                @{col.creator.handle}
+                              </Link>
+                            </span>
+                          </div>
+                        </div>
+
+                        {col.description ? (
+                          <p className="text-xs text-[#cfc3e8] line-clamp-2">
+                            {col.description}
+                          </p>
+                        ) : null}
+
+                        {/* Revealed Item Sprite Previews */}
+                        {col.previewIcons.length > 0 ? (
+                          <div className="flex items-center gap-2 pt-1">
+                            {col.previewIcons.map((preview) => (
+                              <Link
+                                key={preview.thingTid}
+                                href={`/thing/${encodeURIComponent(preview.thingTid)}`}
+                                title={preview.name}
+                                className="rpg-slot flex h-12 w-12 shrink-0 items-center justify-center p-1.5 transition-colors hover:border-[#ffd15c]"
+                              >
+                                <img
+                                  src={preview.iconUrl}
+                                  alt={preview.name}
+                                  className="pixel-art h-full w-full object-contain"
+                                />
+                              </Link>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rpg-slot flex items-center gap-2.5 px-3 py-2 text-xs text-[#cfc3e8]">
+                            <PackageOpen
+                              className="h-4 w-4 shrink-0 text-[#ffd15c]"
+                              aria-hidden="true"
+                            />
+                            <span>No items revealed yet—be the first!</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#9e762a]/35 pt-3 pb-1">
+                        <span className="text-xs text-[#cfc3e8]">
+                          <strong className="font-pixel text-[#ffd15c]">
+                            {col.revealedCount}
+                          </strong>{" "}
+                          / {col.totalItems} Revealed
+                        </span>
+
+                        <Link
+                          href={`/collection/${encodeURIComponent(col.collectionTid)}`}
+                          className="rpg-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px]"
+                        >
+                          <PackageOpen
+                            className="h-3 w-3"
+                            aria-hidden="true"
+                          />
+                          View Collection
+                        </Link>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+            {totalCollectionPages > 1 && (
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={collectionPage <= 1 || collectionsLoading}
+                  onClick={() => {
+                    const p = collectionPage - 1;
+                    setCollectionPage(p);
+                    void runCollectionSearch({ p });
+                  }}
+                  className="rpg-btn-secondary px-4 py-2 font-pixel text-xs"
+                >
+                  Prev
+                </button>
+                <span className="font-pixel text-xs text-[#cfc3e8]">
+                  Page {collectionPage} / {totalCollectionPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={
+                    collectionPage >= totalCollectionPages || collectionsLoading
+                  }
+                  onClick={() => {
+                    const p = collectionPage + 1;
+                    setCollectionPage(p);
+                    void runCollectionSearch({ p });
+                  }}
+                  className="rpg-btn-secondary px-4 py-2 font-pixel text-xs"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Panel 3: Users Search */}
         <div
           ref={usersPanelRef}
           role="tabpanel"
@@ -429,56 +797,64 @@ export function CatalogBrowser({
               <span className="font-pixel block text-xs text-[#8ec8ff]">
                 SEARCH USERS
               </span>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void runUserSearch();
-                }}
-                className="flex flex-col gap-2.5 sm:flex-row"
-              >
-                <div className="relative flex-1">
-                  <label htmlFor={userSearchInputId} className="sr-only">
-                    Search users by handle or display name
-                  </label>
-                  <input
-                    id={userSearchInputId}
-                    type="search"
-                    placeholder="Search players or @handle (e.g. alice.bsky.social)..."
-                    value={userQuery}
-                    onChange={(e) => setUserQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        if (e.nativeEvent.isComposing || e.keyCode === 229) {
-                          e.preventDefault();
-                        }
-                      }
-                    }}
-                    className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
-                  />
-                </div>
-
-                {userQuery.trim() && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserQuery("");
-                      void runUserSearch("");
-                    }}
-                    className="rpg-btn-secondary px-4 py-2.5 font-pixel text-xs"
-                  >
-                    Clear
-                  </button>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={usersLoading}
-                  className="rpg-btn-primary inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-pixel text-xs"
+              <search>
+                <form
+                  action="/search"
+                  method="GET"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void runUserSearch();
+                  }}
+                  className="flex flex-col gap-2.5 sm:flex-row"
                 >
-                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                  {usersLoading ? "Searching..." : "Find Users"}
-                </button>
-              </form>
+                  <div className="relative flex-1">
+                    <label htmlFor={userSearchInputId} className="sr-only">
+                      Search users by handle or display name
+                    </label>
+                    <input
+                      id={userSearchInputId}
+                      name="q"
+                      type="search"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      placeholder="Search players or @handle (e.g. alice.bsky.social)..."
+                      value={userQuery}
+                      onChange={(e) => setUserQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          if (e.nativeEvent.isComposing || e.keyCode === 229) {
+                            e.preventDefault();
+                          }
+                        }
+                      }}
+                      className="rpg-slot w-full px-3.5 py-2.5 text-sm text-[#fdf6e9] placeholder:text-[#cfc3e8]/50 focus:border-[#4da6ff] focus:outline-none"
+                    />
+                  </div>
+
+                  {userQuery.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserQuery("");
+                        void runUserSearch("");
+                      }}
+                      className="rpg-btn-secondary px-4 py-2.5 font-pixel text-xs"
+                    >
+                      Clear
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={usersLoading}
+                    className="rpg-btn-primary inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-pixel text-xs"
+                  >
+                    <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                    {usersLoading ? "Searching..." : "Find Users"}
+                  </button>
+                </form>
+              </search>
             </div>
 
             {users.length === 0 ? (

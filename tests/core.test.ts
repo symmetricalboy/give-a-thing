@@ -943,4 +943,34 @@ describe("Give a Thing — Core Engine Verification", () => {
     );
     expect(migrateSrc).toContain("CREATE TABLE IF NOT EXISTS daily_pull_cache");
   });
+
+  it("keeps stacked hidden=until-found tabpanels non-blocking, hides category dropdown, adds Collections search tab, and sorts Users & Collections by latest activity", () => {
+    const globalsCss = fs.readFileSync(
+      path.join(process.cwd(), "src", "app", "globals.css"),
+      "utf8"
+    );
+    expect(globalsCss).toContain('& > [role="tabpanel"][hidden]');
+    expect(globalsCss).toContain("pointer-events: none;");
+    expect(globalsCss).toContain('& > [role="tabpanel"]:not([hidden])');
+
+    const findSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "CatalogBrowser.tsx"),
+      "utf8"
+    );
+    expect(findSrc).toContain("THINGS ({totalCount})");
+    expect(findSrc).toContain("COLLECTIONS ({totalCollectionsCount})");
+    expect(findSrc).toContain("USERS ({totalUsersCount})");
+    expect(findSrc).toContain("SEARCH COLLECTIONS");
+    expect(findSrc).not.toContain("Browse by 30 Thing Categories");
+    expect(findSrc).not.toContain("MACRO_CATEGORIES");
+
+    const queriesSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "lib", "queries.ts"),
+      "utf8"
+    );
+    expect(queriesSrc).toContain("searchDirectoryCollections");
+    expect(queriesSrc).toContain("userLastActivityExpr");
+    expect(queriesSrc).not.toContain("return b.heldCount - a.heldCount;");
+    expect(queriesSrc).toContain("desc(schema.thingCollections.createdAt)");
+  });
 });

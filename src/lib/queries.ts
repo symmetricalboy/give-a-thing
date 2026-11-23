@@ -63,6 +63,23 @@ export interface DirectoryUserCard extends PublicUserBrief {
   viewerFollows: boolean;
 }
 
+export interface DirectoryCollectionCard {
+  collectionTid: string;
+  name: string;
+  description: string | null;
+  totalItems: number;
+  remainingCount: number;
+  revealedCount: number;
+  priceCents: number;
+  createdAtIso: string;
+  creator: PublicUserBrief;
+  previewIcons: Array<{
+    thingTid: string;
+    iconUrl: string;
+    name: string;
+  }>;
+}
+
 export type { BlueskyProfileLink };
 
 export interface ThingCardItem {
@@ -615,14 +632,38 @@ export async function searchDirectoryUsers(params: {
   const rawQuery = params.query?.trim() ?? "";
   const cleanQuery = rawQuery.replace(/^@/, "");
 
+  // Order registered players by most recent activity they have performed
+  const userLastActivityExpr = sql<string>`GREATEST(
+    ${schema.users.createdAt},
+    ${schema.users.updatedAt},
+    COALESCE(
+      (SELECT MAX(fe.created_at) FROM feed_events fe WHERE fe.actor_did = ${schema.users.did}),
+      ${schema.users.createdAt}
+    ),
+    COALESCE(
+      (SELECT MAX(tc.created_at) FROM thing_collections tc WHERE tc.creator_did = ${schema.users.did}),
+      ${schema.users.createdAt}
+    ),
+    COALESCE(
+      (SELECT MAX(f.created_at) FROM follows f WHERE f.follower_did = ${schema.users.did}),
+      ${schema.users.createdAt}
+    ),
+    COALESCE(
+      (SELECT MAX(uf.created_at) FROM user_favorite_things uf WHERE uf.user_did = ${schema.users.did}),
+      ${schema.users.createdAt}
+    )
+  )`;
+
   let localUsers: Array<{
     did: string;
     handle: string;
     displayName: string | null;
     avatarUrl: string | null;
+    lastActivityAt: string | Date;
   }> = [];
   let localMatchingCount = 0;
   let viewerFollowSet = new Set<string>();
+  const lastActivityMsByDid = new Map<string, number>();
   let dbAvailable = true;
 
   try {
@@ -642,10 +683,11 @@ export async function searchDirectoryUsers(params: {
           handle: schema.users.handle,
           displayName: schema.users.displayName,
           avatarUrl: schema.users.avatarUrl,
+          lastActivityAt: userLastActivityExpr,
         })
         .from(schema.users)
         .where(userWhere)
-        .orderBy(desc(schema.users.createdAt))
+        .orderBy(desc(userLastActivityExpr), desc(schema.users.createdAt))
         .limit(limit),
       db.select({ value: count() }).from(schema.users).where(userWhere),
       params.viewerDid
@@ -656,6 +698,12 @@ export async function searchDirectoryUsers(params: {
         : Promise.resolve([]),
     ]);
     localUsers = uRows;
+    for (const u of uRows) {
+      const ts = new Date(u.lastActivityAt).getTime();
+      if (Number.isFinite(ts)) {
+        lastActivityMsByDid.set(u.did, ts);
+      }
+    }
     localMatchingCount = Number(countRes[0]?.value ?? 0);
     viewerFollowSet = new Set(fRows.map((f) => f.subjectDid));
   } catch {
@@ -678,7 +726,10 @@ export async function searchDirectoryUsers(params: {
 
   for (const u of localUsers) {
     mergedByDid.set(u.did, {
-      ...u,
+      did: u.did,
+      handle: u.handle,
+      displayName: u.displayName,
+      avatarUrl: u.avatarUrl,
       isRegisteredPlayer: true,
     });
   }
@@ -688,10 +739,19 @@ export async function searchDirectoryUsers(params: {
       const db = getDb();
       const remoteDids = remoteActors.map((a) => a.did);
       const registeredRemote = await db
-        .select({ did: schema.users.did })
+        .select({
+          did: schema.users.did,
+          lastActivityAt: userLastActivityExpr,
+        })
         .from(schema.users)
         .where(inArray(schema.users.did, remoteDids));
       const regSet = new Set(registeredRemote.map((r) => r.did));
+      for (const r of registeredRemote) {
+        const ts = new Date(r.lastActivityAt).getTime();
+        if (Number.isFinite(ts)) {
+          lastActivityMsByDid.set(r.did, ts);
+        }
+      }
 
       for (const a of remoteActors) {
         const existing = mergedByDid.get(a.did);
@@ -802,8 +862,12 @@ export async function searchDirectoryUsers(params: {
       if (a.isRegisteredPlayer !== b.isRegisteredPlayer) {
         return a.isRegisteredPlayer ? -1 : 1;
       }
-      if (b.heldCount !== a.heldCount) {
-        return b.heldCount - a.heldCount;
+      if (a.isRegisteredPlayer && b.isRegisteredPlayer) {
+        const bActivity = lastActivityMsByDid.get(b.did) ?? 0;
+        const aActivity = lastActivityMsByDid.get(a.did) ?? 0;
+        if (bActivity !== aActivity) {
+          return bActivity - aActivity;
+        }
       }
       return a.handle.localeCompare(b.handle);
     });
@@ -811,6 +875,163 @@ export async function searchDirectoryUsers(params: {
   return {
     users: sortedUsers,
     totalCount: Math.max(localMatchingCount, mergedByDid.size),
+  };
+}
+
+export async function searchDirectoryCollections(params: {
+  query?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{
+  collections: DirectoryCollectionCard[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}> {
+  await releaseExpiredCollectionReservations();
+
+  const db = getDb();
+  const page = Math.max(1, params.page ?? 1);
+  const pageSize = Math.min(Math.max(params.pageSize ?? 24, 1), 60);
+  const offset = (page - 1) * pageSize;
+  const rawQuery = params.query?.trim() ?? "";
+  const cleanHandleQuery = rawQuery.replace(/^@/, "");
+
+  const conditions = [
+    sql`EXISTS (
+      SELECT 1
+      FROM things t
+      WHERE t.collection_id = ${schema.thingCollections.collectionTid}
+    )`,
+  ];
+
+  if (rawQuery) {
+    const pattern = `%${rawQuery}%`;
+    const handlePattern = `%${cleanHandleQuery}%`;
+    const searchMatch = or(
+      ilike(schema.thingCollections.name, pattern),
+      ilike(schema.thingCollections.description, pattern),
+      sql`EXISTS (
+        SELECT 1
+        FROM users u
+        WHERE u.did = ${schema.thingCollections.creatorDid}
+          AND (u.handle ILIKE ${handlePattern} OR u.display_name ILIKE ${pattern})
+      )`
+    );
+    if (searchMatch) {
+      conditions.push(searchMatch);
+    }
+  }
+
+  const whereClause = and(...conditions);
+
+  const [collectionRows, totalRes] = await Promise.all([
+    db
+      .select()
+      .from(schema.thingCollections)
+      .where(whereClause)
+      .orderBy(desc(schema.thingCollections.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ value: count() })
+      .from(schema.thingCollections)
+      .where(whereClause),
+  ]);
+
+  if (collectionRows.length === 0) {
+    return {
+      collections: [],
+      totalCount: Number(totalRes[0]?.value ?? 0),
+      page,
+      pageSize,
+    };
+  }
+
+  const colTids = collectionRows.map((c) => c.collectionTid);
+  const creatorDids = collectionRows.map((c) => c.creatorDid);
+
+  const [userMap, unclaimedRows, revealedItemRows] = await Promise.all([
+    fetchUsersMap(creatorDids),
+    db
+      .select({
+        collectionId: schema.things.collectionId,
+        value: count(),
+      })
+      .from(schema.things)
+      .where(
+        and(
+          inArray(schema.things.collectionId, colTids),
+          eq(schema.things.status, "unclaimed")
+        )
+      )
+      .groupBy(schema.things.collectionId),
+    db
+      .select({
+        thingTid: schema.things.thingTid,
+        collectionId: schema.things.collectionId,
+        iconUrl: schema.things.iconUrl,
+        name: schema.things.name,
+        createdAt: schema.things.createdAt,
+      })
+      .from(schema.things)
+      .where(
+        and(
+          inArray(schema.things.collectionId, colTids),
+          inArray(schema.things.status, ["held", "escrowed"])
+        )
+      )
+      .orderBy(desc(schema.things.createdAt), desc(schema.things.catalogNumber)),
+  ]);
+
+  const remainingMap = new Map<string, number>();
+  for (const r of unclaimedRows) {
+    if (r.collectionId) {
+      remainingMap.set(r.collectionId, Number(r.value));
+    }
+  }
+
+  const revealedCountMap = new Map<string, number>();
+  const previewIconsMap = new Map<
+    string,
+    Array<{ thingTid: string; iconUrl: string; name: string }>
+  >();
+
+  for (const item of revealedItemRows) {
+    if (!item.collectionId) continue;
+    revealedCountMap.set(
+      item.collectionId,
+      (revealedCountMap.get(item.collectionId) ?? 0) + 1
+    );
+    const list = previewIconsMap.get(item.collectionId) ?? [];
+    if (list.length < 4) {
+      list.push({
+        thingTid: item.thingTid,
+        iconUrl: item.iconUrl,
+        name: item.name,
+      });
+      previewIconsMap.set(item.collectionId, list);
+    }
+  }
+
+  const collections: DirectoryCollectionCard[] = collectionRows.map((c) => ({
+    collectionTid: c.collectionTid,
+    name: c.name,
+    description: c.description,
+    totalItems: c.totalItems,
+    remainingCount: remainingMap.get(c.collectionTid) ?? 0,
+    revealedCount: revealedCountMap.get(c.collectionTid) ?? 0,
+    priceCents: c.priceCents,
+    createdAtIso: c.createdAt.toISOString(),
+    creator: userMap.get(c.creatorDid) ?? fallbackBrief(c.creatorDid),
+    previewIcons: previewIconsMap.get(c.collectionTid) ?? [],
+  }));
+
+  return {
+    collections,
+    totalCount: Number(totalRes[0]?.value ?? 0),
+    page,
+    pageSize,
   };
 }
 
@@ -1031,6 +1252,18 @@ export async function getPlayerProfile(
   const pullUtcDate = getCurrentUtcDateString();
   const nextPullUtcIso = getNextUtcMidnightIso();
 
+  const latestThingActivityExpr = sql`GREATEST(
+    ${schema.things.createdAt},
+    COALESCE(
+      (
+        SELECT MAX(pe.occurred_at)
+        FROM provenance_entries pe
+        WHERE pe.thing_tid = ${schema.things.thingTid}
+      ),
+      ${schema.things.createdAt}
+    )
+  )`;
+
   const [
     heldRows,
     favoriteRows,
@@ -1054,7 +1287,7 @@ export async function getPlayerProfile(
           inArray(schema.things.status, ["held", "escrowed"])
         )
       )
-      .orderBy(desc(schema.things.createdAt)),
+      .orderBy(desc(latestThingActivityExpr), desc(schema.things.catalogNumber)),
     db
       .select()
       .from(schema.userFavoriteThings)
