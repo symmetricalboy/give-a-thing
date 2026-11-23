@@ -199,7 +199,7 @@ export function FeedTimeline({
                     <Link href="/friends" className="text-[#8ec8ff] underline">
                       FIND MY FRIENDS
                     </Link>{" "}
-                    on your <strong>MY THINGS</strong> page to follow your
+                    on your <strong>YOUR THINGS</strong> page to follow your
                     Bluesky friends and see what pointless things they unwrap
                     and give away!
                   </>

@@ -322,7 +322,7 @@ export function buildAtmosphereDefineRecord(params: {
         rkey: "any",
         role: "inventory",
         label: "Things Owned",
-        acquire: `${cleanUrl}/bag`,
+        acquire: `${cleanUrl}/profile`,
         purpose:
           "Active possession records in each player's PDS for every pointless 16-bit thing they currently hold, including provenance hops.",
         verify: {
@@ -385,7 +385,7 @@ export function buildAtmosphereDefineRecord(params: {
         rkey: "any",
         role: "activity",
         label: "Direct Gift Receipts",
-        acquire: `${cleanUrl}/bag`,
+        acquire: `${cleanUrl}/profile`,
         purpose:
           "Signed transfer receipts published in a sender's PDS whenever they give a thing to another player.",
       },
@@ -394,7 +394,7 @@ export function buildAtmosphereDefineRecord(params: {
         rkey: "any",
         role: "activity",
         label: "Pending Gift Escrow Offers",
-        acquire: `${cleanUrl}/bag`,
+        acquire: `${cleanUrl}/profile`,
         purpose:
           "Escrow offers reserving a thing for a Bluesky friend who has not joined Give a Thing yet, revocable by the sender after 24 hours if unclaimed.",
       },

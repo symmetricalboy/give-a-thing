@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Make Things",
+  title: "Make New Things",
   description:
     "Coming soon: create your own custom collections of pointless 16-bit things to share, gift, or sell.",
 };
@@ -21,7 +21,7 @@ export default function MakeThingsPage() {
   return (
     <div className="space-y-6">
       {/* Main Coming Soon Showcase */}
-      <section aria-label="Make Things Coming Soon" className="rpg-panel overflow-hidden">
+      <section aria-label="Make New Things Coming Soon" className="rpg-panel overflow-hidden">
         <div className="candy-ribbon w-full" aria-hidden="true" />
 
         <div className="p-6 sm:p-10 text-center space-y-5">
@@ -38,7 +38,7 @@ export default function MakeThingsPage() {
           </div>
 
           <h1 className="font-pixel text-xl sm:text-2xl text-[#ffd15c]">
-            MAKE THINGS
+            MAKE NEW THINGS
           </h1>
 
           <p className="mx-auto max-w-xl text-sm sm:text-base leading-relaxed text-[#fdf6e9]">

@@ -228,7 +228,7 @@ export function GiveThingModal({
               @{escrowCreated.recipientHandle} hasn&apos;t joined Give a Thing
               yet, so we set this thing aside for their Bluesky account! If
               unclaimed after <strong>24 hours</strong>, you can return it from{" "}
-              <strong>MY THINGS</strong>.
+              <strong>YOUR THINGS</strong>.
             </p>
           </div>
 

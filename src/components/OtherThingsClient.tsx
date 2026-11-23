@@ -104,7 +104,7 @@ export function OtherThingsClient({
       <section aria-label="Support and Contact" className="rpg-panel p-6 sm:p-8 space-y-5">
         <div className="space-y-1.5 border-b-2 border-[#9e762a]/50 pb-4">
           <h1 className="font-pixel text-base sm:text-lg text-[#ffd15c]">
-            OTHER THINGS
+            IMPORTANT THINGS
           </h1>
           <p className="text-xs sm:text-sm text-[#cfc3e8]">
             Support links, our Privacy Policy, Terms of Service, Code of
@@ -367,7 +367,7 @@ export function OtherThingsClient({
 
               <div className="space-y-1.5">
                 <h3 className="font-pixel text-xs text-[#ffd15c]">
-                  4. Upcoming Creator Tools (&ldquo;Make Things&rdquo;)
+                  4. Upcoming Creator Tools (&ldquo;Make New Things&rdquo;)
                 </h3>
                 <p className="text-[#cfc3e8]">
                   When upcoming creator tools launch allowing players to create
@@ -449,7 +449,7 @@ export function OtherThingsClient({
                   <strong className="text-[#fdf6e9]">
                     Keep Future Creations Safe:
                   </strong>{" "}
-                  When custom collections arrive in Make Things, player-created
+                  When custom collections arrive in Make New Things, player-created
                   items must respect intellectual property and remain free of
                   hateful, illegal, or abusive imagery.
                 </li>
@@ -507,7 +507,7 @@ export function OtherThingsClient({
           <div className="rounded border border-[#ff4d6d]/50 bg-[#160f24] px-4 py-3 text-xs text-[#cfc3e8]">
             You are currently logged out.{" "}
             <Link
-              href="/login?returnTo=/other"
+              href="/login?returnTo=/important"
               className="font-semibold text-[#8ec8ff] underline hover:text-[#ffd15c]"
             >
               LOGIN

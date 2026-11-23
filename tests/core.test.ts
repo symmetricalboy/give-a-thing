@@ -396,13 +396,11 @@ describe("Give a Thing — Core Engine Verification", () => {
       "utf8"
     );
     const tabLabels = [
-      'label: "HOME"',
       'label: "GET A THING"',
       'label: "THINGS THAT HAPPENED"',
-      'label: "MY THINGS"',
-      'label: "MAKE THINGS"',
+      'label: "YOUR THINGS"',
+      'label: "MAKE NEW THINGS"',
       'label: "FIND THINGS"',
-      'label: "OTHER THINGS"',
     ];
     let lastIndex = -1;
     for (const lbl of tabLabels) {
@@ -410,13 +408,26 @@ describe("Give a Thing — Core Engine Verification", () => {
       expect(idx, `Missing ${lbl} in NavbarShell`).toBeGreaterThan(lastIndex);
       lastIndex = idx;
     }
+    expect(navbarSrc).not.toContain('label: "HOME"');
+    expect(navbarSrc).not.toContain('label: "MY THINGS"');
+    expect(navbarSrc).not.toContain('label: "MAKE THINGS"');
     expect(navbarSrc).not.toContain('label: "ALL THE THINGS"');
+    expect(navbarSrc).not.toContain('label: "OTHER THINGS"');
+    expect(navbarSrc).not.toContain(
+      "Get a Pointless Thing Every Day &amp; Give Things Away"
+    );
     expect(navbarSrc).not.toContain("Sign in with Bluesky");
     expect(navbarSrc).toContain("LOGIN");
     expect(navbarSrc).not.toContain("00:00 UTC");
+    expect(navbarSrc).not.toContain("@giveathing.com");
     expect(navbarSrc).toContain(
       "Copyright (c) 2026 Dylan Gregori Singer (symmetricalboy)"
     );
+
+    const newsFooterIdx = navbarSrc.indexOf("NEWS ABOUT THINGS");
+    const importantFooterIdx = navbarSrc.indexOf("IMPORTANT THINGS");
+    expect(newsFooterIdx).toBeGreaterThan(-1);
+    expect(importantFooterIdx).toBeGreaterThan(newsFooterIdx);
 
     const loginFormSrc = fs.readFileSync(
       path.join(process.cwd(), "src", "components", "AtmosphereLoginForm.tsx"),
@@ -434,6 +445,22 @@ describe("Give a Thing — Core Engine Verification", () => {
     );
     expect(heroSrc).not.toContain("Pause Boxes");
     expect(heroSrc).not.toContain("Play Boxes");
+    expect(heroSrc).not.toContain("NEWS &amp; UPDATES");
+    expect(heroSrc).toContain("LOGIN");
+    expect(heroSrc).toContain("GET A THING");
+
+    const newsPageSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "app", "news", "page.tsx"),
+      "utf8"
+    );
+    expect(newsPageSrc).toContain("NEWS ABOUT THINGS");
+    expect(newsPageSrc).toContain("NEWS_POSTS");
+
+    const profilePageSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "app", "profile", "page.tsx"),
+      "utf8"
+    );
+    expect(profilePageSrc).toContain("YOUR THINGS");
 
     const findSrc = fs.readFileSync(
       path.join(process.cwd(), "src", "components", "CatalogBrowser.tsx"),
@@ -447,6 +474,7 @@ describe("Give a Thing — Core Engine Verification", () => {
       path.join(process.cwd(), "src", "components", "OtherThingsClient.tsx"),
       "utf8"
     );
+    expect(otherSrc).toContain("IMPORTANT THINGS");
     expect(otherSrc).toContain("PRIVACY POLICY");
     expect(otherSrc).toContain("TERMS OF SERVICE");
     expect(otherSrc).toContain("CODE OF CONDUCT");
@@ -460,7 +488,7 @@ describe("Give a Thing — Core Engine Verification", () => {
       "utf8"
     );
     expect(makePageSrc).toContain("COMING SOON");
-    expect(makePageSrc).toContain("MAKE THINGS");
+    expect(makePageSrc).toContain("MAKE NEW THINGS");
     expect(makePageSrc.toLowerCase()).toContain("collections");
     expect(makePageSrc.toLowerCase()).toContain("sell");
 

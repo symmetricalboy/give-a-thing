@@ -325,14 +325,14 @@ export function FriendsManager({
 
   return (
     <div className="space-y-6">
-      {/* Top Breadcrumb Back to MY THINGS */}
+      {/* Top Breadcrumb Back to YOUR THINGS */}
       <div>
         <Link
           href={`/u/${encodeURIComponent(viewerHandle)}`}
           className="rpg-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 font-pixel text-xs"
         >
           <ArrowLeft className="h-3.5 w-3.5 text-[#ffd15c]" aria-hidden="true" />
-          Back to My Things
+          Back to Your Things
         </Link>
       </div>
 

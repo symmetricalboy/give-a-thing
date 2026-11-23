@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 export default async function FriendsPage() {
   const session = await getCurrentSession();
   if (!session) {
-    redirect("/bag");
+    redirect("/profile");
   }
 
   let autoImport = false;

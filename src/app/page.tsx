@@ -2,7 +2,6 @@ import React from "react";
 import { count } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getCurrentSession } from "@/lib/session";
-import { NEWS_POSTS } from "@/lib/news";
 import { HomeLandingHero } from "@/components/HomeLandingHero";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +20,8 @@ export default async function HomePage() {
 
   return (
     <HomeLandingHero
-      newsPosts={NEWS_POSTS}
       totalThingsCount={totalThingsCount}
       authenticated={Boolean(session)}
-      viewerHandle={session?.handle ?? null}
     />
   );
 }
