@@ -32,7 +32,13 @@ import {
   estimateMysteryBoxPayoutBreakdown,
   MAX_PAID_PULL_CENTS,
   MAX_PLATFORM_FEE_BPS,
+  PLATFORM_STRIPE_ACCOUNT_SENTINEL,
 } from "@/lib/stripe/pricing";
+
+function hasServerStripeSecret(): boolean {
+  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  return Boolean(key && !key.includes("replace_with"));
+}
 
 export const MIN_COLLECTION_ITEMS = 5;
 export const MAX_COLLECTION_ITEMS = 50;
@@ -270,13 +276,37 @@ export async function publishCreatorCollection(
     throw new Error("Creator account not found. Please log in again.");
   }
 
+  let creatorStripeAccountId = creator.stripeAccountId;
+  let creatorPayoutsReady = creator.stripePayoutsReady;
+  if (isUnlimitedPullAccount(creator) && hasServerStripeSecret()) {
+    if (
+      creatorStripeAccountId !== PLATFORM_STRIPE_ACCOUNT_SENTINEL ||
+      !creatorPayoutsReady
+    ) {
+      await db
+        .update(schema.users)
+        .set({
+          stripeAccountId: PLATFORM_STRIPE_ACCOUNT_SENTINEL,
+          stripePayoutsReady: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.did, creatorDid));
+    }
+    creatorStripeAccountId = PLATFORM_STRIPE_ACCOUNT_SENTINEL;
+    creatorPayoutsReady = true;
+  }
+
   const priceCents = parsed.priceCents ?? 0;
-  const platformFeeBps = priceCents === 0 ? 0 : (parsed.platformFeeBps ?? 0);
+  const platformFeeBps =
+    priceCents === 0 ||
+    creatorStripeAccountId === PLATFORM_STRIPE_ACCOUNT_SENTINEL
+      ? 0
+      : (parsed.platformFeeBps ?? 0);
   const breakdown = estimateMysteryBoxPayoutBreakdown(priceCents, platformFeeBps);
   if (!breakdown.valid) {
     throw new Error(breakdown.validationError ?? "Invalid collection pricing.");
   }
-  if (priceCents > 0 && (!creator.stripeAccountId || !creator.stripePayoutsReady)) {
+  if (priceCents > 0 && (!creatorStripeAccountId || !creatorPayoutsReady)) {
     throw new Error(
       "Connect and complete your payout method setup before setting a paid price on a mystery box."
     );
@@ -478,9 +508,21 @@ export async function publishCreatorCollection(
         .where(eq(schema.things.thingTid, prep.thingTid));
     } catch (pdsErr) {
       console.error(
-        `[maker] Creator PDS genesis putRecord warning for ${prep.thingTid}:`,
+        `[maker] Creator PDS genesis putRecord error for ${prep.thingTid}:`,
         pdsErr
       );
+      if (i === 0) {
+        // Cleanly roll back DB rows if creator's OAuth session lacks `repo:com.giveathing.thing` scope
+        await db
+          .delete(schema.things)
+          .where(eq(schema.things.collectionId, collectionTid));
+        await db
+          .delete(schema.thingCollections)
+          .where(eq(schema.thingCollections.collectionTid, collectionTid));
+        throw new Error(
+          "Please log out and click LOGIN once to grant permission to store created .thing records in your Personal Data Server (PDS)—your draft collection is safely saved right here in your browser!"
+        );
+      }
     }
   }
 
@@ -501,12 +543,6 @@ export async function updateCreatorCollectionPricing(params: {
 }) {
   const parsed = UpdateCollectionPricingInputSchema.parse(params.rawInput);
   const priceCents = parsed.priceCents;
-  const platformFeeBps = priceCents === 0 ? 0 : parsed.platformFeeBps;
-
-  const breakdown = estimateMysteryBoxPayoutBreakdown(priceCents, platformFeeBps);
-  if (!breakdown.valid) {
-    throw new Error(breakdown.validationError ?? "Invalid collection pricing.");
-  }
 
   const db = getDb();
   const [[creator], [collection]] = await Promise.all([
@@ -532,7 +568,38 @@ export async function updateCreatorCollectionPricing(params: {
     throw new Error("Only the collection creator can update its pricing.");
   }
 
-  if (priceCents > 0 && (!creator.stripeAccountId || !creator.stripePayoutsReady)) {
+  let creatorStripeAccountId = creator.stripeAccountId;
+  let creatorPayoutsReady = creator.stripePayoutsReady;
+  if (isUnlimitedPullAccount(creator) && hasServerStripeSecret()) {
+    if (
+      creatorStripeAccountId !== PLATFORM_STRIPE_ACCOUNT_SENTINEL ||
+      !creatorPayoutsReady
+    ) {
+      await db
+        .update(schema.users)
+        .set({
+          stripeAccountId: PLATFORM_STRIPE_ACCOUNT_SENTINEL,
+          stripePayoutsReady: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.did, params.creatorDid));
+    }
+    creatorStripeAccountId = PLATFORM_STRIPE_ACCOUNT_SENTINEL;
+    creatorPayoutsReady = true;
+  }
+
+  const platformFeeBps =
+    priceCents === 0 ||
+    creatorStripeAccountId === PLATFORM_STRIPE_ACCOUNT_SENTINEL
+      ? 0
+      : parsed.platformFeeBps;
+
+  const breakdown = estimateMysteryBoxPayoutBreakdown(priceCents, platformFeeBps);
+  if (!breakdown.valid) {
+    throw new Error(breakdown.validationError ?? "Invalid collection pricing.");
+  }
+
+  if (priceCents > 0 && (!creatorStripeAccountId || !creatorPayoutsReady)) {
     throw new Error(
       "Connect and complete your payout method setup before charging for pulls on a mystery box."
     );

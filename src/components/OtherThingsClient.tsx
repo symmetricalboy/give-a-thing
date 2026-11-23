@@ -241,11 +241,12 @@ export function OtherThingsClient({
                 <p className="text-[#cfc3e8]">
                   Like Bluesky profiles and posts, ATmosphere Personal Data
                   Server (PDS) records are public. While you play, Give a Thing
-                  writes records for things you hold (
+                  writes records for custom things you create (
+                  <code>com.giveathing.thing</code>), things you hold (
                   <code>com.giveathing.holding</code>), your pinned Top 8
                   favorites (<code>com.giveathing.favorite</code>), gift
                   transfers, pending gift offers, claims, and Give a Thing
-                  friend follows to your PDS repository, and maintains canonical
+                  friend follows to your PDS repository, and maintains daily
                   thing definitions and ownership history on{" "}
                   <code>@giveathing.com</code>&apos;s PDS and in our game
                   database so everyone can browse collections, histories, and
@@ -268,14 +269,18 @@ export function OtherThingsClient({
 
               <div className="space-y-1.5">
                 <h3 className="font-pixel text-xs text-[#ffd15c]">
-                  4. Infrastructure &amp; Service Providers
+                  4. Infrastructure, Payments &amp; Service Providers
                 </h3>
                 <p className="text-[#cfc3e8]">
-                  Give a Thing uses cloud hosting, PostgreSQL storage, S3-compatible
-                  sprite storage, and AI generation APIs solely to conjure daily
-                  16-bit sprites, item descriptions, and semantic search
-                  embeddings. Player handles or private tokens are never used to
-                  train external models.
+                  Give a Thing uses cloud hosting, PostgreSQL storage,
+                  S3-compatible sprite storage, and AI generation APIs solely to
+                  conjure 16-bit sprites, item descriptions, and semantic search
+                  embeddings. Optional creator payout onboarding and paid Mystery
+                  Box purchases are processed directly by <strong>Stripe</strong>{" "}
+                  on Stripe-hosted pages—Give a Thing never sees or stores your
+                  credit card numbers, bank account numbers, or tax IDs. Player
+                  handles or private tokens are never used to train external
+                  models.
                 </p>
               </div>
 
@@ -368,13 +373,24 @@ export function OtherThingsClient({
 
               <div className="space-y-1.5">
                 <h3 className="font-pixel text-xs text-[#ffd15c]">
-                  4. Upcoming Creator Tools (&ldquo;Make New Things&rdquo;)
+                  4. Creator Collections &amp; Paid Mystery Boxes (&ldquo;Make New Things&rdquo;)
                 </h3>
                 <p className="text-[#cfc3e8]">
-                  When upcoming creator tools launch allowing players to create
-                  custom collections or optionally sell them, additional creator
-                  and commerce terms will apply before you publish or sell any
-                  collection.
+                  When you publish a custom collection in Make New Things, you
+                  represent that you own or have permission to share the text and
+                  512×512 PNG artwork you upload, and you grant Give a Thing a
+                  non-exclusive license to display and transmit those sprites to
+                  holders across the game. Genesis <code>.thing</code> records
+                  live in your own PDS, meaning a creator may revoke and destroy
+                  a created thing at any time. Creators who connect a Stripe
+                  payout account to charge for Mystery Box pulls act as the
+                  merchant of record for those direct Stripe charges, are
+                  responsible for any applicable taxes, refunds, or disputes on
+                  their connected Stripe account, and may optionally allocate a
+                  percentage of each pull to support Give a Thing. Because
+                  Mystery Box pulls immediately reveal and mint a randomized
+                  digital item, completed Mystery Box purchases are generally
+                  final unless a technical error prevented item delivery.
                 </p>
               </div>
 
@@ -448,11 +464,12 @@ export function OtherThingsClient({
                 </li>
                 <li>
                   <strong className="text-[#fdf6e9]">
-                    Keep Future Creations Safe:
+                    Keep Custom Creations Original &amp; Safe:
                   </strong>{" "}
-                  When custom collections arrive in Make New Things, player-created
-                  items must respect intellectual property and remain free of
-                  hateful, illegal, or abusive imagery.
+                  Collections published in Make New Things must be unique items
+                  that respect intellectual property and remain completely free
+                  of hateful, sexually explicit, illegal, or abusive text and
+                  imagery.
                 </li>
               </ul>
 

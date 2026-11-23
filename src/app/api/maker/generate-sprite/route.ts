@@ -5,6 +5,24 @@ import { processInto16BitSprite } from "@/lib/generator/pixel-art";
 import { isUnlimitedPullAccount } from "@/lib/generator/pull-service";
 import { getCurrentSession } from "@/lib/session";
 
+const MAX_SPRITE_GENERATIONS_PER_HOUR = 30;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const spriteGenBuckets = new Map<string, number[]>();
+
+function checkSpriteRateLimit(did: string): { allowed: boolean } {
+  const now = Date.now();
+  const recent = (spriteGenBuckets.get(did) ?? []).filter(
+    (ts) => now - ts < ONE_HOUR_MS
+  );
+  if (recent.length >= MAX_SPRITE_GENERATIONS_PER_HOUR) {
+    spriteGenBuckets.set(did, recent);
+    return { allowed: false };
+  }
+  recent.push(now);
+  spriteGenBuckets.set(did, recent);
+  return { allowed: true };
+}
+
 const GenerateSpriteBodySchema = z.object({
   name: z
     .string()
@@ -46,11 +64,18 @@ export async function POST(req: NextRequest) {
       { status: 401 }
     );
   }
+
   if (!isUnlimitedPullAccount(session)) {
-    return NextResponse.json(
-      { error: "Make New Things studio is currently restricted to @giveathing.com." },
-      { status: 403 }
-    );
+    const rate = checkSpriteRateLimit(session.did);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            "You've generated 30 custom sprites in the last hour—take a short breather or upload a 512x512 PNG!",
+        },
+        { status: 429 }
+      );
+    }
   }
 
   if (!process.env.GEMINI_API_KEY?.trim()) {

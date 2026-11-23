@@ -2,7 +2,10 @@ import { and, count, eq, inArray, sql } from "drizzle-orm";
 import Stripe from "stripe";
 import { getDb, schema } from "@/db";
 import { getPublicAppUrl } from "@/lib/atproto/oauth";
-import { getCurrentUtcDateString } from "@/lib/generator/pull-service";
+import {
+  getCurrentUtcDateString,
+  isUnlimitedPullAccount,
+} from "@/lib/generator/pull-service";
 import { nextTid } from "@/lib/lexicons";
 import {
   CollectionSoldOutError,
@@ -10,7 +13,10 @@ import {
   finalizeCollectionItemDelivery,
   releaseExpiredCollectionReservations,
 } from "@/lib/maker/collection-service";
-import { estimateMysteryBoxPayoutBreakdown } from "@/lib/stripe/pricing";
+import {
+  estimateMysteryBoxPayoutBreakdown,
+  PLATFORM_STRIPE_ACCOUNT_SENTINEL,
+} from "@/lib/stripe/pricing";
 
 export interface CreatorPayoutStatus {
   stripeConfigured: boolean;
@@ -30,6 +36,28 @@ export function isStripeConfigured(): boolean {
   return Boolean(key && !key.includes("replace_with"));
 }
 
+function isStripeKeyLivemode(): boolean {
+  const key = process.env.STRIPE_SECRET_KEY?.trim() ?? "";
+  return key.startsWith("sk_live_") || key.startsWith("rk_live_");
+}
+
+function isMissingOrModeMismatchedStripeAccountError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as {
+    code?: string;
+    statusCode?: number;
+    message?: string;
+  };
+  if (e.code === "resource_missing" || e.statusCode === 404) return true;
+  const msg = (e.message ?? "").toLowerCase();
+  return (
+    msg.includes("no such account") ||
+    msg.includes("similar object exists in test mode") ||
+    msg.includes("similar object exists in live mode") ||
+    msg.includes("does not have access to account")
+  );
+}
+
 export function getStripeClient(): Stripe {
   const key = process.env.STRIPE_SECRET_KEY?.trim();
   if (!key || key.includes("replace_with")) {
@@ -42,6 +70,15 @@ export function getStripeClient(): Stripe {
     cachedStripeKey = key;
   }
   return cachedStripe;
+}
+
+function buildStripeRequestOptions(
+  stripeAccountId: string | null | undefined
+): Stripe.RequestOptions | undefined {
+  if (!stripeAccountId || stripeAccountId === PLATFORM_STRIPE_ACCOUNT_SENTINEL) {
+    return undefined;
+  }
+  return { stripeAccount: stripeAccountId };
 }
 
 /**
@@ -70,6 +107,32 @@ export async function syncCreatorPayoutStatus(
     .where(eq(schema.users.did, creatorDid))
     .limit(1);
 
+  if (user && isUnlimitedPullAccount(user)) {
+    if (
+      user.stripeAccountId !== PLATFORM_STRIPE_ACCOUNT_SENTINEL ||
+      !user.stripePayoutsReady
+    ) {
+      await db
+        .update(schema.users)
+        .set({
+          stripeAccountId: PLATFORM_STRIPE_ACCOUNT_SENTINEL,
+          stripePayoutsReady: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.did, creatorDid));
+    }
+
+    return {
+      stripeConfigured: true,
+      connected: true,
+      payoutsReady: true,
+      stripeAccountId: PLATFORM_STRIPE_ACCOUNT_SENTINEL,
+      cardPaymentsStatus: "active",
+      payoutsStatus: "active",
+      requirementsDue: false,
+    };
+  }
+
   if (!user || !user.stripeAccountId) {
     return {
       stripeConfigured: true,
@@ -87,6 +150,28 @@ export async function syncCreatorPayoutStatus(
     const acct = await stripe.v2.core.accounts.retrieve(user.stripeAccountId, {
       include: ["configuration.merchant", "defaults", "requirements"],
     });
+
+    // Self-heal if switching between Stripe sandbox (sk_test_) and live production (sk_live_)
+    if (acct.livemode !== isStripeKeyLivemode()) {
+      await db
+        .update(schema.users)
+        .set({
+          stripeAccountId: null,
+          stripePayoutsReady: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.did, creatorDid));
+
+      return {
+        stripeConfigured: true,
+        connected: false,
+        payoutsReady: false,
+        stripeAccountId: null,
+        cardPaymentsStatus: "not_started",
+        payoutsStatus: "not_started",
+        requirementsDue: false,
+      };
+    }
 
     const cardPaymentsStatus =
       acct.configuration?.merchant?.capabilities?.card_payments?.status ??
@@ -125,6 +210,28 @@ export async function syncCreatorPayoutStatus(
       requirementsDue,
     };
   } catch (err) {
+    // Automatically clear stale sandbox account IDs when switching to live mode (or vice-versa)
+    if (isMissingOrModeMismatchedStripeAccountError(err)) {
+      await db
+        .update(schema.users)
+        .set({
+          stripeAccountId: null,
+          stripePayoutsReady: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.did, creatorDid));
+
+      return {
+        stripeConfigured: true,
+        connected: false,
+        payoutsReady: false,
+        stripeAccountId: null,
+        cardPaymentsStatus: "not_started",
+        payoutsStatus: "not_started",
+        requirementsDue: false,
+      };
+    }
+
     console.warn("[stripe/connect] Could not retrieve v2 account:", err);
     return {
       stripeConfigured: true,
@@ -166,6 +273,9 @@ export async function createCreatorPayoutOnboardingLink(
   mode: "onboard" | "update" = "onboard"
 ): Promise<{ url: string; stripeAccountId: string }> {
   const stripe = getStripeClient();
+  // Ensure any stale sandbox account ID is cleared before onboarding in live mode
+  await syncCreatorPayoutStatus(creatorDid);
+
   const db = getDb();
   const appUrl = getPublicAppUrl();
 
@@ -177,6 +287,16 @@ export async function createCreatorPayoutOnboardingLink(
 
   if (!user) {
     throw new Error("Creator account not found. Please log in again.");
+  }
+
+  if (
+    isUnlimitedPullAccount(user) ||
+    user.stripeAccountId === PLATFORM_STRIPE_ACCOUNT_SENTINEL
+  ) {
+    return {
+      url: `${appUrl}/make?stripe=return`,
+      stripeAccountId: PLATFORM_STRIPE_ACCOUNT_SENTINEL,
+    };
   }
 
   let stripeAccountId = user.stripeAccountId;
@@ -322,15 +442,47 @@ export async function createPaidCollectionCheckoutSession(params: {
   if (!buyer) {
     throw new Error("Player account not found. Please log in again.");
   }
-  if (!creator || !creator.stripeAccountId || !creator.stripePayoutsReady) {
+  if (!creator) {
     throw new Error(
       "This creator's payout account is temporarily unavailable for paid pulls."
     );
   }
 
+  let effectiveStripeAccountId = creator.stripeAccountId;
+  let effectivePayoutsReady = creator.stripePayoutsReady;
+  if (isUnlimitedPullAccount(creator) && isStripeConfigured()) {
+    if (
+      effectiveStripeAccountId !== PLATFORM_STRIPE_ACCOUNT_SENTINEL ||
+      !effectivePayoutsReady
+    ) {
+      await db
+        .update(schema.users)
+        .set({
+          stripeAccountId: PLATFORM_STRIPE_ACCOUNT_SENTINEL,
+          stripePayoutsReady: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.did, creator.did));
+    }
+    effectiveStripeAccountId = PLATFORM_STRIPE_ACCOUNT_SENTINEL;
+    effectivePayoutsReady = true;
+  }
+
+  if (!effectiveStripeAccountId || !effectivePayoutsReady) {
+    throw new Error(
+      "This creator's payout account is temporarily unavailable for paid pulls."
+    );
+  }
+
+  const isPlatformDirect =
+    effectiveStripeAccountId === PLATFORM_STRIPE_ACCOUNT_SENTINEL;
+  const effectivePlatformFeeBps = isPlatformDirect
+    ? 0
+    : collection.platformFeeBps;
+
   const breakdown = estimateMysteryBoxPayoutBreakdown(
     collection.priceCents,
-    collection.platformFeeBps
+    effectivePlatformFeeBps
   );
   if (!breakdown.valid) {
     throw new Error(
@@ -384,7 +536,7 @@ export async function createPaidCollectionCheckoutSession(params: {
       thingTid: lockedThing.thingTid,
       buyerDid: params.buyerDid,
       creatorDid: creator.did,
-      stripeAccountId: creator.stripeAccountId!,
+      stripeAccountId: effectiveStripeAccountId,
       amountCents: breakdown.priceCents,
       platformFeeCents: breakdown.platformDonationCents,
       status: "pending",
@@ -397,6 +549,7 @@ export async function createPaidCollectionCheckoutSession(params: {
 
   const appUrl = getPublicAppUrl();
   const profilePath = `/u/${encodeURIComponent(creator.handle)}`;
+  const stripeReqOptions = buildStripeRequestOptions(effectiveStripeAccountId);
 
   try {
     const checkoutSession = await stripe.checkout.sessions.create(
@@ -417,7 +570,7 @@ export async function createPaidCollectionCheckoutSession(params: {
           },
         ],
         payment_intent_data: {
-          ...(breakdown.platformDonationCents > 0
+          ...(!isPlatformDirect && breakdown.platformDonationCents > 0
             ? { application_fee_amount: breakdown.platformDonationCents }
             : {}),
           metadata: {
@@ -436,9 +589,7 @@ export async function createPaidCollectionCheckoutSession(params: {
         success_url: `${appUrl}${profilePath}?checkout_session_id={CHECKOUT_SESSION_ID}&collection=${encodeURIComponent(collection.collectionTid)}`,
         cancel_url: `${appUrl}${profilePath}?checkout_cancelled=${encodeURIComponent(purchaseId)}`,
       },
-      {
-        stripeAccount: creator.stripeAccountId,
-      }
+      stripeReqOptions
     );
 
     if (!checkoutSession.url) {
@@ -507,21 +658,20 @@ export async function releasePendingCollectionPurchase(params: {
   if (purchase.checkoutSessionId && isStripeConfigured()) {
     try {
       const stripe = getStripeClient();
+      const stripeReqOptions = buildStripeRequestOptions(
+        purchase.stripeAccountId
+      );
       const session = await stripe.checkout.sessions.retrieve(
         purchase.checkoutSessionId,
         {},
-        { stripeAccount: purchase.stripeAccountId }
+        stripeReqOptions
       );
       if (session.payment_status === "paid") {
         return;
       }
       if (session.status === "open") {
         await stripe.checkout.sessions
-          .expire(
-            purchase.checkoutSessionId,
-            {},
-            { stripeAccount: purchase.stripeAccountId }
-          )
+          .expire(purchase.checkoutSessionId, {}, stripeReqOptions)
           .catch(() => {});
       }
     } catch {
@@ -578,10 +728,13 @@ export async function fulfillPaidCollectionPurchase(params: {
   }
 
   const stripe = getStripeClient();
+  const stripeReqOptions = buildStripeRequestOptions(
+    existingPurchase.stripeAccountId
+  );
   const session = await stripe.checkout.sessions.retrieve(
     params.checkoutSessionId,
     {},
-    { stripeAccount: existingPurchase.stripeAccountId }
+    stripeReqOptions
   );
 
   if (session.payment_status !== "paid") {
@@ -759,15 +912,17 @@ export async function fulfillPaidCollectionPurchase(params: {
 
   if (txResult.soldOutRefundNeeded) {
     if (paymentIntentId) {
+      const isPlatformDirect =
+        existingPurchase.stripeAccountId === PLATFORM_STRIPE_ACCOUNT_SENTINEL;
       await stripe.refunds
         .create(
           {
             payment_intent: paymentIntentId,
-            ...(existingPurchase.platformFeeCents > 0
+            ...(!isPlatformDirect && existingPurchase.platformFeeCents > 0
               ? { refund_application_fee: true }
               : {}),
           },
-          { stripeAccount: existingPurchase.stripeAccountId }
+          stripeReqOptions
         )
         .catch((err) => {
           console.error("[stripe/fulfill] Auto-refund error:", err);

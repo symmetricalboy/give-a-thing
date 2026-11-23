@@ -16,6 +16,25 @@ export const MAX_PLATFORM_FEE_BPS = 9_000;
 export const STRIPE_ESTIMATED_CARD_BPS = 290;
 export const STRIPE_ESTIMATED_FIXED_CENTS = 30;
 
+/**
+ * Sentinel `users.stripe_account_id` value for the official @giveathing.com account,
+ * whose paid Mystery Box pulls settle directly into Give a Thing's platform Stripe balance.
+ */
+export const PLATFORM_STRIPE_ACCOUNT_SENTINEL = "platform";
+
+/**
+ * Parses one or more comma-separated Stripe webhook signing secrets (`whsec_...`)
+ * so a single `STRIPE_WEBHOOK_SECRET` env var can verify both Connected Account
+ * and direct Platform webhook endpoints.
+ */
+export function parseStripeWebhookSecrets(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => Boolean(s) && !s.includes("replace_with"));
+}
+
 export interface MysteryBoxPayoutBreakdown {
   isFree: boolean;
   priceCents: number;

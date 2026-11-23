@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { isUnlimitedPullAccount } from "@/lib/generator/pull-service";
 import {
   listCreatorCollectionsForStudio,
   updateCreatorCollectionPricing,
@@ -17,12 +16,6 @@ export async function PATCH(
     return NextResponse.json(
       { error: "Authentication required." },
       { status: 401 }
-    );
-  }
-  if (!isUnlimitedPullAccount(session)) {
-    return NextResponse.json(
-      { error: "Make New Things studio is currently restricted to @giveathing.com." },
-      { status: 403 }
     );
   }
 

@@ -347,7 +347,10 @@ export function MakerStudioClient({
     if (!editingPriceCollection) return;
     setEditPriceError(null);
 
-    const derived = derivePricingPayload(editPriceForm);
+    const derived = derivePricingPayload(
+      editPriceForm,
+      payoutStatus.stripeAccountId === "platform"
+    );
     if (!derived.valid) {
       setEditPriceError(derived.validationError ?? "Invalid collection price.");
       return;
@@ -781,7 +784,10 @@ export function MakerStudioClient({
       return;
     }
 
-    const pricingPayload = derivePricingPayload(draftPricing);
+    const pricingPayload = derivePricingPayload(
+      draftPricing,
+      payoutStatus.stripeAccountId === "platform"
+    );
     if (!pricingPayload.valid) {
       setStudioError(
         pricingPayload.validationError ?? "Invalid collection pricing."

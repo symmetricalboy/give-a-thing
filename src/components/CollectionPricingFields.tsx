@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useId } from "react";
+import React, { useId, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,6 +17,7 @@ import {
   formatUsdCents,
   parseUsdInputToCents,
   percentToBps,
+  PLATFORM_STRIPE_ACCOUNT_SENTINEL,
 } from "@/lib/stripe/pricing";
 
 export type DonationPreset = "0" | "10" | "custom";
@@ -28,7 +29,10 @@ export interface CollectionPricingFormState {
   customDonationInput: string;
 }
 
-export function derivePricingPayload(state: CollectionPricingFormState): {
+export function derivePricingPayload(
+  state: CollectionPricingFormState,
+  isPlatformDirect = false
+): {
   priceCents: number;
   platformFeeBps: number;
   valid: boolean;
@@ -55,29 +59,32 @@ export function derivePricingPayload(state: CollectionPricingFormState): {
   }
 
   let platformFeeBps = 0;
-  if (state.donationPreset === "10") {
-    platformFeeBps = 1000;
-  } else if (state.donationPreset === "custom") {
-    const trimmed = state.customDonationInput.trim().replace(/%$/, "").trim();
-    if (!trimmed || !/^\d+(\.\d{0,2})?$/.test(trimmed)) {
-      return {
-        priceCents: parsedCents,
-        platformFeeBps: 0,
-        valid: false,
-        validationError:
-          "Enter a valid custom Give a Thing support percentage between 0 and 90.",
-      };
+  if (!isPlatformDirect) {
+    if (state.donationPreset === "10") {
+      platformFeeBps = 1000;
+    } else if (state.donationPreset === "custom") {
+      const trimmed = state.customDonationInput.trim().replace(/%$/, "").trim();
+      if (!trimmed || !/^\d+(\.\d{0,2})?$/.test(trimmed)) {
+        return {
+          priceCents: parsedCents,
+          platformFeeBps: 0,
+          valid: false,
+          validationError:
+            "Enter a valid custom Give a Thing support percentage between 0 and 90.",
+        };
+      }
+      const pct = Number(trimmed);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 90) {
+        return {
+          priceCents: parsedCents,
+          platformFeeBps: 0,
+          valid: false,
+          validationError:
+            "Custom support percentage must be between 0% and 90%.",
+        };
+      }
+      platformFeeBps = percentToBps(pct);
     }
-    const pct = Number(trimmed);
-    if (!Number.isFinite(pct) || pct < 0 || pct > 90) {
-      return {
-        priceCents: parsedCents,
-        platformFeeBps: 0,
-        valid: false,
-        validationError: "Custom support percentage must be between 0% and 90%.",
-      };
-    }
-    platformFeeBps = percentToBps(pct);
   }
 
   const breakdown = estimateMysteryBoxPayoutBreakdown(
@@ -140,27 +147,38 @@ export function CollectionPricingFields({
   onChange,
 }: CollectionPricingFieldsProps) {
   const uid = useId();
+  const [priceBlurred, setPriceBlurred] = useState(false);
+  const [customPctBlurred, setCustomPctBlurred] = useState(false);
+
+  const isPlatformDirect =
+    payoutStatus.stripeAccountId === PLATFORM_STRIPE_ACCOUNT_SENTINEL;
 
   const parsedPriceCents = value.isPaid
     ? (parseUsdInputToCents(value.priceDollarsInput) ?? 0)
     : 0;
 
-  const activeBps = !value.isPaid
-    ? 0
-    : value.donationPreset === "0"
+  const activeBps =
+    !value.isPaid || isPlatformDirect
       ? 0
-      : value.donationPreset === "10"
-        ? 1000
-        : (() => {
-            const raw = value.customDonationInput.trim().replace(/%$/, "");
-            const n = Number(raw);
-            return Number.isFinite(n) && n >= 0 ? percentToBps(n) : 0;
-          })();
+      : value.donationPreset === "0"
+        ? 0
+        : value.donationPreset === "10"
+          ? 1000
+          : (() => {
+              const raw = value.customDonationInput.trim().replace(/%$/, "");
+              const n = Number(raw);
+              return Number.isFinite(n) && n >= 0 ? percentToBps(n) : 0;
+            })();
 
+  const derived = derivePricingPayload(value, isPlatformDirect);
   const breakdown = estimateMysteryBoxPayoutBreakdown(
     parsedPriceCents,
     activeBps
   );
+  const showValidationAlert =
+    (priceBlurred || customPctBlurred) &&
+    !derived.valid &&
+    Boolean(derived.validationError);
 
   return (
     <div className="space-y-4">
@@ -191,15 +209,17 @@ export function CollectionPricingFields({
           <p className="text-xs text-[#cfc3e8] leading-relaxed">
             {!payoutStatus.stripeConfigured
               ? "Stripe keys are not configured on this server yet—collections can be published as Free ($0) right now."
-              : payoutStatus.payoutsReady
-                ? "Your Stripe payout account is active! You can set any price ($0.50+) per pull on your Mystery Boxes."
-                : payoutStatus.connected
-                  ? "Finish your Stripe onboarding details to unlock charging for pulls on your Mystery Boxes."
-                  : "Free Mystery Boxes need no setup! To charge money per pull, connect a payout method with Stripe first."}
+              : isPlatformDirect
+                ? "Connected directly to Give a Thing's Stripe account! You can set any price ($0.50+) per pull on your Mystery Boxes."
+                : payoutStatus.payoutsReady
+                  ? "Your Stripe payout account is active! You can set any price ($0.50+) per pull on your Mystery Boxes."
+                  : payoutStatus.connected
+                    ? "Finish your Stripe onboarding details to unlock charging for pulls on your Mystery Boxes."
+                    : "Free Mystery Boxes need no setup! To charge money per pull, connect a payout method with Stripe first."}
           </p>
         </div>
 
-        {payoutStatus.stripeConfigured ? (
+        {payoutStatus.stripeConfigured && !isPlatformDirect ? (
           <button
             type="button"
             disabled={onboardingBusy}
@@ -323,12 +343,27 @@ export function CollectionPricingFields({
                   name="priceUsd"
                   type="text"
                   inputMode="decimal"
-                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={value.priceDollarsInput}
-                  onChange={(e) =>
-                    onChange({ ...value, priceDollarsInput: e.target.value })
+                  onChange={(e) => {
+                    const nextState = {
+                      ...value,
+                      priceDollarsInput: e.target.value,
+                    };
+                    if (derivePricingPayload(nextState, isPlatformDirect).valid) {
+                      setPriceBlurred(false);
+                    }
+                    onChange(nextState);
+                  }}
+                  onBlur={() => setPriceBlurred(true)}
+                  aria-invalid={showValidationAlert ? true : undefined}
+                  aria-describedby={
+                    showValidationAlert
+                      ? `${uid}-price-hint ${uid}-pricing-error`
+                      : `${uid}-price-hint`
                   }
-                  aria-describedby={`${uid}-price-hint`}
                   placeholder="2.50"
                   className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] py-2.5 pl-8 pr-14 font-semibold text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
                 />
@@ -342,76 +377,96 @@ export function CollectionPricingFields({
             </div>
 
             {/* Optional Support Give a Thing Percentage (0% default, 10%, Custom %) */}
-            <fieldset className="space-y-2.5">
-              <legend className="font-pixel text-xs text-[#ff99ac] flex items-center gap-1.5">
-                <Heart className="h-3.5 w-3.5" aria-hidden="true" />
-                Support Give a Thing (Optional Donation %)
-              </legend>
-              <p className="text-xs text-[#cfc3e8]">
-                Want to chip in a slice of each pull to support Give a Thing?
-                Defaults to <strong>0%</strong>—completely optional!
-              </p>
+            {!isPlatformDirect ? (
+              <fieldset className="space-y-2.5">
+                <legend className="font-pixel text-xs text-[#ff99ac] flex items-center gap-1.5">
+                  <Heart className="h-3.5 w-3.5" aria-hidden="true" />
+                  Support Give a Thing (Optional Donation %)
+                </legend>
+                <p className="text-xs text-[#cfc3e8]">
+                  Want to chip in a slice of each pull to support Give a Thing?
+                  Defaults to <strong>0%</strong>—completely optional!
+                </p>
 
-              <div className="flex flex-wrap items-center gap-2.5">
-                {(
-                  [
-                    { preset: "0", label: "0% (Default)" },
-                    { preset: "10", label: "10%" },
-                    { preset: "custom", label: "Custom %" },
-                  ] as const
-                ).map((opt) => {
-                  const selected = value.donationPreset === opt.preset;
-                  return (
-                    <label
-                      key={opt.preset}
-                      htmlFor={`${uid}-don-${opt.preset}`}
-                      className={`inline-flex items-center gap-2 rounded border-2 px-3.5 py-2 cursor-pointer font-pixel text-[10px] transition-colors ${
-                        selected
-                          ? "border-[#ff99ac] bg-[#483275] text-[#ffd15c]"
-                          : "border-[#9e762a]/60 bg-[#160f24] text-[#cfc3e8] hover:border-[#8ec8ff]"
-                      }`}
-                    >
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {(
+                    [
+                      { preset: "0", label: "0% (Default)" },
+                      { preset: "10", label: "10%" },
+                      { preset: "custom", label: "Custom %" },
+                    ] as const
+                  ).map((opt) => {
+                    const selected = value.donationPreset === opt.preset;
+                    return (
+                      <label
+                        key={opt.preset}
+                        htmlFor={`${uid}-don-${opt.preset}`}
+                        className={`inline-flex items-center gap-2 rounded border-2 px-3.5 py-2 cursor-pointer font-pixel text-[10px] transition-colors ${
+                          selected
+                            ? "border-[#ff99ac] bg-[#483275] text-[#ffd15c]"
+                            : "border-[#9e762a]/60 bg-[#160f24] text-[#cfc3e8] hover:border-[#8ec8ff]"
+                        }`}
+                      >
+                        <input
+                          id={`${uid}-don-${opt.preset}`}
+                          type="radio"
+                          name={`${uid}-donation-preset`}
+                          checked={selected}
+                          onChange={() =>
+                            onChange({ ...value, donationPreset: opt.preset })
+                          }
+                          className="rpg-choice-input h-3.5 w-3.5"
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    );
+                  })}
+
+                  {value.donationPreset === "custom" ? (
+                    <div className="inline-flex items-center gap-1.5">
+                      <label htmlFor={`${uid}-custom-pct`} className="sr-only">
+                        Custom Give a Thing donation percentage
+                      </label>
                       <input
-                        id={`${uid}-don-${opt.preset}`}
-                        type="radio"
-                        name={`${uid}-donation-preset`}
-                        checked={selected}
-                        onChange={() =>
-                          onChange({ ...value, donationPreset: opt.preset })
+                        id={`${uid}-custom-pct`}
+                        name="customDonationPercent"
+                        type="text"
+                        inputMode="decimal"
+                        autoCorrect="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        value={value.customDonationInput}
+                        onChange={(e) => {
+                          const nextState = {
+                            ...value,
+                            customDonationInput: e.target.value,
+                          };
+                          if (
+                            derivePricingPayload(nextState, isPlatformDirect)
+                              .valid
+                          ) {
+                            setCustomPctBlurred(false);
+                          }
+                          onChange(nextState);
+                        }}
+                        onBlur={() => setCustomPctBlurred(true)}
+                        aria-invalid={showValidationAlert ? true : undefined}
+                        aria-describedby={
+                          showValidationAlert
+                            ? `${uid}-pricing-error`
+                            : undefined
                         }
-                        className="rpg-choice-input h-3.5 w-3.5"
+                        placeholder="5"
+                        className="rpg-field-control w-24 rounded border-2 border-[#ff99ac] bg-[#160f24] px-3 py-1.5 text-sm text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
                       />
-                      <span>{opt.label}</span>
-                    </label>
-                  );
-                })}
-
-                {value.donationPreset === "custom" ? (
-                  <div className="inline-flex items-center gap-1.5">
-                    <label htmlFor={`${uid}-custom-pct`} className="sr-only">
-                      Custom Give a Thing donation percentage
-                    </label>
-                    <input
-                      id={`${uid}-custom-pct`}
-                      name="customDonationPercent"
-                      type="text"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      value={value.customDonationInput}
-                      onChange={(e) =>
-                        onChange({
-                          ...value,
-                          customDonationInput: e.target.value,
-                        })
-                      }
-                      placeholder="5"
-                      className="rpg-field-control w-24 rounded border-2 border-[#ff99ac] bg-[#160f24] px-3 py-1.5 text-sm text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
-                    />
-                    <span className="font-pixel text-xs text-[#ff99ac]">%</span>
-                  </div>
-                ) : null}
-              </div>
-            </fieldset>
+                      <span className="font-pixel text-xs text-[#ff99ac]">
+                        %
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              </fieldset>
+            ) : null}
 
             {/* Live Stripe Fee & Creator Net Payout Estimate */}
             <div className="rpg-slot p-4 space-y-2.5 border-[#ffd15c]/50">
@@ -434,22 +489,24 @@ export function CollectionPricingFields({
                   </dd>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 text-[#cfc3e8]">
-                  <dt>
-                    Support Give a Thing ({bpsToPercentDisplay(activeBps)})
-                  </dt>
-                  <dd
-                    className={
-                      breakdown.platformDonationCents > 0
-                        ? "text-[#ff99ac]"
-                        : "text-[#cfc3e8]"
-                    }
-                  >
-                    {breakdown.platformDonationCents > 0
-                      ? `-${formatUsdCents(breakdown.platformDonationCents)}`
-                      : "$0.00"}
-                  </dd>
-                </div>
+                {!isPlatformDirect ? (
+                  <div className="flex items-center justify-between gap-2 text-[#cfc3e8]">
+                    <dt>
+                      Support Give a Thing ({bpsToPercentDisplay(activeBps)})
+                    </dt>
+                    <dd
+                      className={
+                        breakdown.platformDonationCents > 0
+                          ? "text-[#ff99ac]"
+                          : "text-[#cfc3e8]"
+                      }
+                    >
+                      {breakdown.platformDonationCents > 0
+                        ? `-${formatUsdCents(breakdown.platformDonationCents)}`
+                        : "$0.00"}
+                    </dd>
+                  </div>
+                ) : null}
 
                 <div className="flex items-center justify-between gap-2 border-t border-[#9e762a]/45 pt-2 font-bold">
                   <dt className="font-pixel text-[11px] text-[#4be3a0]">
@@ -473,8 +530,9 @@ export function CollectionPricingFields({
                 Stripe card-network fees.
               </p>
 
-              {!breakdown.valid && breakdown.validationError ? (
+              {showValidationAlert && derived.validationError ? (
                 <p
+                  id={`${uid}-pricing-error`}
                   role="alert"
                   className="flex items-start gap-2 rounded border border-[#ff4d6d] bg-[#ff4d6d]/15 p-2.5 text-xs text-[#ffd6de]"
                 >
@@ -482,7 +540,7 @@ export function CollectionPricingFields({
                     className="h-4 w-4 shrink-0 text-[#ff4d6d] mt-0.5"
                     aria-hidden="true"
                   />
-                  <span>{breakdown.validationError}</span>
+                  <span>{derived.validationError}</span>
                 </p>
               ) : null}
             </div>

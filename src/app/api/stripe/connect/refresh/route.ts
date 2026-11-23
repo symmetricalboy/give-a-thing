@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getPublicAppUrl } from "@/lib/atproto/oauth";
-import { isUnlimitedPullAccount } from "@/lib/generator/pull-service";
 import { getCurrentSession } from "@/lib/session";
 import { createCreatorPayoutOnboardingLink } from "@/lib/stripe/connect";
 
@@ -8,8 +7,8 @@ export async function GET() {
   const appUrl = getPublicAppUrl();
   const session = await getCurrentSession();
 
-  if (!session || !isUnlimitedPullAccount(session)) {
-    return NextResponse.redirect(`${appUrl}/make`);
+  if (!session) {
+    return NextResponse.redirect(`${appUrl}/login?returnTo=/make`);
   }
 
   try {

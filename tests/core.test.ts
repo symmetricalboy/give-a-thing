@@ -47,8 +47,10 @@ import {
   bpsToPercentDisplay,
   estimateMysteryBoxPayoutBreakdown,
   formatUsdCents,
+  parseStripeWebhookSecrets,
   parseUsdInputToCents,
   percentToBps,
+  PLATFORM_STRIPE_ACCOUNT_SENTINEL,
 } from "../src/lib/stripe/pricing";
 import { NEWS_POSTS } from "../src/lib/news";
 
@@ -412,8 +414,13 @@ describe("Give a Thing — Core Engine Verification", () => {
   });
 
   it("verifies site navigation order, news feed post, copyright, and zero technical PDS/Gemini jargon in UI components", () => {
-    expect(NEWS_POSTS.length).toBeGreaterThanOrEqual(1);
-    const launchPost = NEWS_POSTS[0]!;
+    expect(NEWS_POSTS.length).toBeGreaterThanOrEqual(2);
+    const makerNewsPost = NEWS_POSTS[0]!;
+    expect(makerNewsPost.title).toBe("MAKE NEW THINGS IS LIVE!");
+    expect(makerNewsPost.badge).toBe("ALPHA UPDATE #2");
+    expect(makerNewsPost.feedbackHandle).toBe("giveathing.com");
+
+    const launchPost = NEWS_POSTS.find((p) => p.id === "a-thing-is-born")!;
     expect(launchPost.title).toBe("A THING IS BORN");
     expect(launchPost.date).toBe("2026-11-22");
     expect(launchPost.feedbackHandle).toBe("giveathing.com");
@@ -540,9 +547,10 @@ describe("Give a Thing — Core Engine Verification", () => {
       path.join(process.cwd(), "src", "app", "make", "page.tsx"),
       "utf8"
     );
-    expect(makePageSrc).toContain("isUnlimitedPullAccount");
+    expect(makePageSrc).not.toContain("isUnlimitedPullAccount");
+    expect(makePageSrc).not.toContain("COMING SOON");
     expect(makePageSrc).toContain("MakerStudioClient");
-    expect(makePageSrc).toContain("COMING SOON");
+    expect(makePageSrc).toContain("LOGIN TO MAKE THINGS");
     expect(makePageSrc).toContain("MAKE NEW THINGS");
     expect(makePageSrc.toLowerCase()).toContain("collections");
     expect(makePageSrc.toLowerCase()).toContain("sell");
@@ -842,5 +850,12 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(profileClientSrc).toContain("hasFreeMysteryBoxWithTimer");
     expect(profileClientSrc).toContain("Buy a Mystery Thing");
     expect(profileClientSrc).toContain("Buy Another");
+
+    expect(PLATFORM_STRIPE_ACCOUNT_SENTINEL).toBe("platform");
+    expect(parseStripeWebhookSecrets(undefined)).toEqual([]);
+    expect(parseStripeWebhookSecrets("replace_with_webhook_secret")).toEqual([]);
+    expect(
+      parseStripeWebhookSecrets(" whsec_connect_123 , whsec_platform_456 ")
+    ).toEqual(["whsec_connect_123", "whsec_platform_456"]);
   });
 });

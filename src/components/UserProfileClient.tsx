@@ -890,18 +890,16 @@ export function UserProfileClient({
                               Your Mystery Box—share your profile for others to{" "}
                               {isPaidBox ? "buy!" : "draw!"}
                             </span>
-                            {viewerUnlimitedPulls ? (
-                              <Link
-                                href={`/make?tab=collections&editPrice=${encodeURIComponent(box.collectionTid)}`}
-                                className="rpg-btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-[10px]"
-                              >
-                                <Coins
-                                  className="h-3.5 w-3.5"
-                                  aria-hidden="true"
-                                />
-                                {isPaidBox ? "Change Price" : "Set Price"}
-                              </Link>
-                            ) : null}
+                            <Link
+                              href={`/make?tab=collections&editPrice=${encodeURIComponent(box.collectionTid)}`}
+                              className="rpg-btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-[10px]"
+                            >
+                              <Coins
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                              {isPaidBox ? "Change Price" : "Set Price"}
+                            </Link>
                           </div>
                         ) : !viewerDid ? (
                           <Link

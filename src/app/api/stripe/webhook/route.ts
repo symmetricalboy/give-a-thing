@@ -7,10 +7,13 @@ import {
   releasePendingCollectionPurchase,
   syncCreatorPayoutStatusByStripeAccountId,
 } from "@/lib/stripe/connect";
+import { parseStripeWebhookSecrets } from "@/lib/stripe/pricing";
 
 export async function POST(req: NextRequest) {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
-  if (!isStripeConfigured() || !webhookSecret || webhookSecret.includes("replace_with")) {
+  const webhookSecrets = parseStripeWebhookSecrets(
+    process.env.STRIPE_WEBHOOK_SECRET
+  );
+  if (!isStripeConfigured() || webhookSecrets.length === 0) {
     return NextResponse.json(
       { error: "Stripe webhook is not configured." },
       { status: 503 }
@@ -28,11 +31,19 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const stripe = getStripeClient();
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
-  } catch (err) {
-    console.warn("[api/stripe/webhook] Invalid signature:", err);
+  let event: Stripe.Event | null = null;
+  let lastVerifyErr: unknown = null;
+  for (const secret of webhookSecrets) {
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+      break;
+    } catch (err) {
+      lastVerifyErr = err;
+    }
+  }
+
+  if (!event) {
+    console.warn("[api/stripe/webhook] Invalid signature:", lastVerifyErr);
     return NextResponse.json(
       { error: "Invalid webhook signature." },
       { status: 400 }
