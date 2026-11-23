@@ -118,7 +118,7 @@ export function DailyParcelPedestal({
   const countdownText = formatUtcCountdown(nextPullIso, nowMs);
 
   return (
-    <section aria-label="Get a Thing" className="rpg-panel p-5 sm:p-8">
+    <section aria-label="Get a Thing" className="rpg-panel p-5 sm:p-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#9e762a]/50 pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <Sparkles className="h-4 w-4 text-[#ff4d6d]" aria-hidden="true" />
@@ -133,7 +133,7 @@ export function DailyParcelPedestal({
         </div>
         <div className="inline-flex items-center gap-1.5 rounded bg-[#160f24] px-2.5 py-1 text-xs text-[#cfc3e8] border border-[#4da6ff]/50">
           <Clock className="h-3.5 w-3.5 text-[#8ec8ff]" aria-hidden="true" />
-          <span>UTC Reset in</span>
+          <span>Day resets in</span>
           <span className="font-pixel text-[#fdf6e9]">{countdownText}</span>
         </div>
       </div>
@@ -188,9 +188,8 @@ export function DailyParcelPedestal({
             </div>
 
             {pulling && (
-              <p className="rounded border border-[#4da6ff]/50 bg-[#4da6ff]/10 px-3.5 py-2 text-xs text-[#8ec8ff]">
-                It could take up to about a minute to find the right thing for
-                you. Please don&apos;t leave this page and hang tight!
+              <p className="whitespace-pre-line rounded border border-[#4da6ff]/50 bg-[#4da6ff]/10 px-3.5 py-2 text-xs text-[#8ec8ff]">
+                {"It could take up to about a minute to find the right thing for you.\nPlease hang tight & don't leave this page!"}
               </p>
             )}
 
@@ -262,9 +261,8 @@ export function DailyParcelPedestal({
           <h2 className="font-pixel text-base sm:text-lg text-[#fdf6e9] mb-2">
             Today&apos;s Box Is Empty!
           </h2>
-          <p className="max-w-lg text-sm leading-relaxed text-[#cfc3e8]">
-            You&apos;ve already gotten a thing today—come back tomorrow for
-            another thing!
+          <p className="max-w-lg whitespace-pre-line text-sm leading-relaxed text-[#cfc3e8]">
+            {"You've already gotten a thing today.\nCome back tomorrow for another thing!"}
           </p>
         </div>
       ) : (
@@ -286,10 +284,10 @@ export function DailyParcelPedestal({
               ? "Selecting a Thing Just for You..."
               : "Today's Pointless Thing Awaits!"}
           </h2>
-          <p className="max-w-lg text-sm leading-relaxed text-[#cfc3e8] mb-6">
+          <p className="max-w-lg whitespace-pre-line text-sm leading-relaxed text-[#cfc3e8] mb-6">
             {pulling
-              ? "It could take up to about a minute to find the right thing for you. Please don't leave this page and hang tight!"
-              : "Every UTC day, click once to unwrap a completely unique, utterly pointless 16-bit thing you can keep in your collection or give away to any friend!"}
+              ? "It could take up to about a minute to find the right thing for you.\nPlease hang tight & don't leave this page!"
+              : "Every day, click once to unwrap a completely unique, utterly pointless thing you can keep in your collection or give away to a friend!"}
           </p>
 
           {error && (

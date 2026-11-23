@@ -6,7 +6,12 @@ export async function GET(req: NextRequest) {
   try {
     const session = await getCurrentSession();
     const modeParam = req.nextUrl.searchParams.get("mode");
-    const mode = modeParam === "following" ? "following" : "global";
+    const mode =
+      modeParam === "following"
+        ? "following"
+        : modeParam === "you"
+          ? "you"
+          : "global";
     const cursorRaw = req.nextUrl.searchParams.get("cursor");
     const cursorId = cursorRaw ? Number(cursorRaw) : undefined;
 

@@ -448,6 +448,8 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(heroSrc).not.toContain("NEWS &amp; UPDATES");
     expect(heroSrc).toContain("LOGIN");
     expect(heroSrc).toContain("GET A THING");
+    expect(heroSrc).toContain("claim invite link sent to them!");
+    expect(heroSrc).not.toContain("140-character gift note");
 
     const newsPageSrc = fs.readFileSync(
       path.join(process.cwd(), "src", "app", "news", "page.tsx"),
@@ -462,6 +464,25 @@ describe("Give a Thing — Core Engine Verification", () => {
     );
     expect(profilePageSrc).toContain("YOUR THINGS");
 
+    const userProfileClientSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "UserProfileClient.tsx"),
+      "utf8"
+    );
+    expect(userProfileClientSrc).toContain("OWNED");
+    expect(userProfileClientSrc).toContain("DISCOVERED");
+    expect(userProfileClientSrc).toContain("CREATED");
+    expect(userProfileClientSrc).toContain("GIVEN AWAY");
+    expect(userProfileClientSrc).toContain("aspect-square");
+
+    const feedTimelineSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "FeedTimeline.tsx"),
+      "utf8"
+    );
+    expect(feedTimelineSrc).toContain("Everyone");
+    expect(feedTimelineSrc).toContain("Following");
+    expect(feedTimelineSrc).toContain("You");
+    expect(feedTimelineSrc).not.toContain(">\n                Friends\n");
+
     const findSrc = fs.readFileSync(
       path.join(process.cwd(), "src", "components", "CatalogBrowser.tsx"),
       "utf8"
@@ -469,6 +490,10 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(findSrc).toContain("FIND THINGS");
     expect(findSrc).toContain("SEARCH THINGS");
     expect(findSrc).toContain("SEARCH USERS");
+    expect(findSrc).toContain("USERS ({totalUsersCount})");
+    expect(findSrc).not.toContain("Hot Potatoes");
+    expect(findSrc).not.toContain("#0001+");
+    expect(findSrc).toContain("rpg-tabpanel-stack");
 
     const otherSrc = fs.readFileSync(
       path.join(process.cwd(), "src", "components", "OtherThingsClient.tsx"),
@@ -481,6 +506,7 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(otherSrc).toContain("support@giveathing.com");
     expect(otherSrc).toContain("https://bsky.app/profile/giveathing.com");
     expect(otherSrc).toContain("DANGER ZONE");
+    expect(otherSrc).toContain("rpg-tabpanel-stack");
     expect(USER_GIVEATHING_COLLECTIONS.length).toBe(6);
 
     const makePageSrc = fs.readFileSync(
@@ -497,13 +523,17 @@ describe("Give a Thing — Core Engine Verification", () => {
       "utf8"
     );
     expect(pedestalSrc).toContain(
-      "It could take up to about a minute to find the right thing for you. Please don't leave this page and hang tight!"
+      "It could take up to about a minute to find the right thing for you.\\nPlease hang tight & don't leave this page!"
     );
-    expect(pedestalSrc).not.toContain(
-      "A thing is being selected for you right now, and it could take up to about 1 minute to find the right thing. Hang tight!"
+    expect(pedestalSrc).toContain(
+      "You've already gotten a thing today.\\nCome back tomorrow for another thing!"
     );
+    expect(pedestalSrc).toContain(
+      "Every day, click once to unwrap a completely unique, utterly pointless thing you can keep in your collection or give away to a friend!"
+    );
+    expect(pedestalSrc).toContain("Day resets in");
+    expect(pedestalSrc).not.toContain("UTC Reset in");
     expect(pedestalSrc).toContain("/empty-box.svg");
-    expect(pedestalSrc.toLowerCase()).toContain("come back tomorrow");
     expect(pedestalSrc).not.toContain("initialTodaysThing");
 
     const cardSrc = fs.readFileSync(

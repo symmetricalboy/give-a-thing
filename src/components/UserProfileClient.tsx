@@ -43,6 +43,10 @@ interface UserProfileClientProps {
   playerHandle: string;
   viewerDid: string | null;
   initialIsFollowing: boolean;
+  heldCount: number;
+  discoveredCount: number;
+  createdCount: number;
+  givenAwayCount: number;
   followingCount: number;
   followersCount: number;
   followingList: ProfileSocialUser[];
@@ -57,6 +61,10 @@ export function UserProfileClient({
   playerHandle,
   viewerDid,
   initialIsFollowing,
+  heldCount,
+  discoveredCount,
+  createdCount,
+  givenAwayCount,
   followingCount,
   followersCount,
   followingList,
@@ -214,11 +222,11 @@ export function UserProfileClient({
     listModal === "followers" ? followersList : followingList;
 
   return (
-    <div className="space-y-8">
-      {/* Friends & Connections Bar (Followers / Following Counters + FIND MY FRIENDS) */}
+    <div className="space-y-6">
+      {/* Friends & Connections Bar (Followers / Following Counters + Own FIND MY FRIENDS or Follow Button) */}
       <section
         aria-label="Friends and Connections"
-        className="rpg-panel-blue p-4 sm:p-5"
+        className="rpg-panel-blue p-5 sm:p-6"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -245,19 +253,17 @@ export function UserProfileClient({
               </span>
               <span>Following</span>
             </button>
-
-            {viewerDid && (
-              <Link
-                href="/friends"
-                className="rpg-btn-blue inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
-              >
-                <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                FIND MY FRIENDS
-              </Link>
-            )}
           </div>
 
-          {viewerDid && !isSelf && (
+          {isSelf ? (
+            <Link
+              href="/friends"
+              className="rpg-btn-blue inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+            >
+              <Search className="h-3.5 w-3.5" aria-hidden="true" />
+              FIND MY FRIENDS
+            </Link>
+          ) : viewerDid ? (
             <button
               type="button"
               disabled={followBusy}
@@ -280,7 +286,48 @@ export function UserProfileClient({
                 </>
               )}
             </button>
-          )}
+          ) : null}
+        </div>
+      </section>
+
+      {/* Thing Counters Panel (Owned, Discovered, Created, Given Away) */}
+      <section aria-label="Thing Statistics" className="rpg-panel p-5 sm:p-6">
+        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+          <div className="rpg-slot flex flex-col items-center justify-center px-4 py-4 text-center border-[#4be3a0]/55">
+            <span className="font-pixel text-xl sm:text-2xl text-[#4be3a0]">
+              {heldCount}
+            </span>
+            <span className="mt-1 font-pixel text-[10px] sm:text-xs text-[#cfc3e8]">
+              OWNED
+            </span>
+          </div>
+
+          <div className="rpg-slot flex flex-col items-center justify-center px-4 py-4 text-center border-[#ffd15c]/55">
+            <span className="font-pixel text-xl sm:text-2xl text-[#ffd15c]">
+              {discoveredCount}
+            </span>
+            <span className="mt-1 font-pixel text-[10px] sm:text-xs text-[#cfc3e8]">
+              DISCOVERED
+            </span>
+          </div>
+
+          <div className="rpg-slot flex flex-col items-center justify-center px-4 py-4 text-center border-[#a87bff]/55">
+            <span className="font-pixel text-xl sm:text-2xl text-[#c49bff]">
+              {createdCount}
+            </span>
+            <span className="mt-1 font-pixel text-[10px] sm:text-xs text-[#cfc3e8]">
+              CREATED
+            </span>
+          </div>
+
+          <div className="rpg-slot flex flex-col items-center justify-center px-4 py-4 text-center border-[#ff4d6d]/55">
+            <span className="font-pixel text-xl sm:text-2xl text-[#ff99ac]">
+              {givenAwayCount}
+            </span>
+            <span className="mt-1 font-pixel text-[10px] sm:text-xs text-[#cfc3e8]">
+              GIVEN AWAY
+            </span>
+          </div>
         </div>
       </section>
 
@@ -325,14 +372,16 @@ export function UserProfileClient({
               the top of your profile.
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {topThings.map((item, idx) => (
                 <div
                   key={item.thingTid}
-                  className="rpg-slot min-w-0 flex flex-col justify-between p-4 border-[#ffd15c]/60"
+                  className={`rpg-slot min-w-0 flex flex-col justify-between p-4 border-[#ffd15c]/60 ${
+                    !isSelf ? "aspect-square" : ""
+                  }`}
                 >
-                  <div className="min-w-0">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="min-w-0 flex flex-1 flex-col justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <span className="rounded bg-[#ff4d6d] px-1.5 py-0.5 font-pixel text-[9px] text-[#24040b]">
                         #{idx + 1}
                       </span>
@@ -343,20 +392,20 @@ export function UserProfileClient({
 
                     <Link
                       href={`/thing/${item.thingTid}`}
-                      className="mx-auto my-2 flex h-20 w-20 items-center justify-center"
+                      className="mx-auto my-2 flex min-h-0 flex-1 items-center justify-center"
                     >
                       <img
                         src={item.iconUrl}
                         alt={item.iconAlt}
-                        width={72}
-                        height={72}
-                        className="pixel-art h-18 w-18 object-contain transition-transform hover:scale-105"
+                        width={144}
+                        height={144}
+                        className="pixel-art h-32 w-32 sm:h-36 sm:w-36 max-h-full max-w-full object-contain transition-transform hover:scale-105"
                       />
                     </Link>
 
                     <Link
                       href={`/thing/${item.thingTid}`}
-                      className="block text-center text-xs sm:text-sm font-semibold leading-snug text-[#fdf6e9] hover:text-[#ffd15c] break-words"
+                      className="block text-center text-xs sm:text-sm font-semibold leading-snug text-[#fdf6e9] hover:text-[#ffd15c] line-clamp-2 break-words"
                     >
                       {item.name}
                     </Link>
@@ -431,7 +480,7 @@ export function UserProfileClient({
       {isSelf && outgoingEscrows.length > 0 && (
         <section
           aria-label="Set-Aside Escrow Gifts"
-          className="rpg-panel-blue p-5 space-y-3"
+          className="rpg-panel-blue p-5 sm:p-6 space-y-3"
         >
           <h2 className="font-pixel text-xs sm:text-sm text-[#8ec8ff]">
             THINGS SET ASIDE FOR FRIENDS ({outgoingEscrows.length})

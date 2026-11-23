@@ -23,11 +23,11 @@ export default async function FindThingsPage() {
   let items: ThingCardItem[] = [];
   let totalCount = 0;
   let initialUsers: DirectoryUserCard[] = [];
+  let initialTotalUsersCount = 0;
 
   try {
     const [thingRes, usersRes] = await Promise.all([
       searchDiscoveryCatalog({
-        sort: "newest",
         page: 1,
         pageSize: 24,
       }),
@@ -38,7 +38,8 @@ export default async function FindThingsPage() {
     ]);
     items = thingRes.items;
     totalCount = thingRes.totalCount;
-    initialUsers = usersRes;
+    initialUsers = usersRes.users;
+    initialTotalUsersCount = usersRes.totalCount;
   } catch {
     // Graceful empty state when DB is not yet migrated locally
   }
@@ -48,6 +49,7 @@ export default async function FindThingsPage() {
       initialItems={items}
       initialTotalCount={totalCount}
       initialUsers={initialUsers}
+      initialTotalUsersCount={initialTotalUsersCount}
       viewerDid={session?.did ?? null}
     />
   );

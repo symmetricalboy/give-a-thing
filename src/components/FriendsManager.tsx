@@ -461,22 +461,23 @@ export function FriendsManager({
             })}
           </div>
 
-          {tabMeta.map((t) => {
-            const selected = activeTab === t.key;
-            const rawList = network ? network[t.key] : [];
-            const filtered = filterCandidates(rawList);
-            const unfollowedCount = rawList.filter(
-              (c) => !followedDidSet.has(c.did)
-            ).length;
+          <div className="rpg-tabpanel-stack">
+            {tabMeta.map((t) => {
+              const selected = activeTab === t.key;
+              const rawList = network ? network[t.key] : [];
+              const filtered = filterCandidates(rawList);
+              const unfollowedCount = rawList.filter(
+                (c) => !followedDidSet.has(c.did)
+              ).length;
 
-            return (
-              <div
-                key={t.key}
-                role="tabpanel"
-                aria-labelledby={tabIds[t.key]}
-                hidden={!selected}
-              >
-                <div className="space-y-3 pt-1">
+              return (
+                <div
+                  key={t.key}
+                  role="tabpanel"
+                  aria-labelledby={tabIds[t.key]}
+                  hidden={!selected}
+                >
+                  <div className="space-y-3">
                   {scanning && !network ? (
                     <div className="rpg-slot p-6 text-center text-xs text-[#cfc3e8]">
                       Scanning your Bluesky {t.label.toLowerCase()} for Give a
@@ -589,6 +590,7 @@ export function FriendsManager({
               </div>
             );
           })}
+          </div>
         </div>
 
         {/* Live Bluesky Directory Lookup Results when typing */}

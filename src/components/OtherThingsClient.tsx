@@ -99,9 +99,9 @@ export function OtherThingsClient({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header & Support Links */}
-      <section aria-label="Support and Contact" className="rpg-panel p-6 sm:p-8 space-y-5">
+      <section aria-label="Support and Contact" className="rpg-panel p-5 sm:p-6 space-y-5">
         <div className="space-y-1.5 border-b-2 border-[#9e762a]/50 pb-4">
           <h1 className="font-pixel text-base sm:text-lg text-[#ffd15c]">
             IMPORTANT THINGS
@@ -149,7 +149,7 @@ export function OtherThingsClient({
       </section>
 
       {/* Policies Tabbed Section */}
-      <section aria-label="Policies and Guidelines" className="space-y-4">
+      <section aria-label="Policies and Guidelines" className="space-y-6">
         <div
           role="tablist"
           aria-label="Policy documents"
@@ -192,13 +192,14 @@ export function OtherThingsClient({
           </button>
         </div>
 
-        {/* Privacy Policy */}
-        <div
-          ref={privacyPanelRef}
-          role="tabpanel"
-          aria-labelledby={privacyTabId}
-        >
-          <article className="rpg-panel p-6 sm:p-8 space-y-5 text-sm leading-relaxed text-[#fdf6e9]">
+        <div className="rpg-tabpanel-stack">
+          {/* Privacy Policy */}
+          <div
+            ref={privacyPanelRef}
+            role="tabpanel"
+            aria-labelledby={privacyTabId}
+          >
+            <article className="rpg-panel p-5 sm:p-6 space-y-5 text-sm leading-relaxed text-[#fdf6e9]">
             <header className="border-b border-[#9e762a]/40 pb-3">
               <h2 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
                 PRIVACY POLICY
@@ -308,7 +309,7 @@ export function OtherThingsClient({
           aria-labelledby={termsTabId}
           hidden
         >
-          <article className="rpg-panel p-6 sm:p-8 space-y-5 text-sm leading-relaxed text-[#fdf6e9]">
+          <article className="rpg-panel p-5 sm:p-6 space-y-5 text-sm leading-relaxed text-[#fdf6e9]">
             <header className="border-b border-[#9e762a]/40 pb-3">
               <h2 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
                 TERMS OF SERVICE
@@ -403,7 +404,7 @@ export function OtherThingsClient({
           aria-labelledby={conductTabId}
           hidden
         >
-          <article className="rpg-panel p-6 sm:p-8 space-y-5 text-sm leading-relaxed text-[#fdf6e9]">
+          <article className="rpg-panel p-5 sm:p-6 space-y-5 text-sm leading-relaxed text-[#fdf6e9]">
             <header className="border-b border-[#9e762a]/40 pb-3">
               <h2 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
                 CODE OF CONDUCT
@@ -478,10 +479,11 @@ export function OtherThingsClient({
             </div>
           </article>
         </div>
+        </div>
       </section>
 
       {/* Danger Zone */}
-      <section aria-label="Danger Zone" className="rpg-panel-red p-6 sm:p-8 space-y-4">
+      <section aria-label="Danger Zone" className="rpg-panel-red p-5 sm:p-6 space-y-4">
         <div className="flex items-center gap-2.5 border-b border-[#ff4d6d]/40 pb-3">
           <AlertTriangle
             className="h-5 w-5 shrink-0 text-[#ff4d6d]"

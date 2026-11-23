@@ -42,12 +42,11 @@ export default async function PlayerProfilePage({
 
   return (
     <div className="space-y-6">
-      {/* Player RPG Profile Banner with Bluesky Profile Info */}
+      {/* Player RPG Profile Banner with Bluesky Profile Link at Top Right */}
       <section className="rpg-panel overflow-hidden">
-        {/* Decorative Candy/Bluesky Accent Header */}
         <div className="candy-ribbon w-full" aria-hidden="true" />
 
-        <div className="p-5 sm:p-6 space-y-4">
+        <div className="p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-start gap-4 min-w-0 flex-1">
               {profile.player.avatarUrl ? (
@@ -77,20 +76,9 @@ export default async function PlayerProfilePage({
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="text-xs font-semibold text-[#ffd15c]">
-                    @{profile.player.handle}
-                  </span>
-                  <a
-                    href={profile.player.bskyProfileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rpg-btn-blue inline-flex items-center gap-1.5 px-2.5 py-1 font-pixel text-[10px]"
-                  >
-                    Bluesky Profile
-                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                  </a>
-                </div>
+                <p className="text-xs font-semibold text-[#ffd15c]">
+                  @{profile.player.handle}
+                </p>
 
                 {profile.player.bio && (
                   <p className="max-w-2xl whitespace-pre-line text-xs sm:text-sm leading-relaxed text-[#fdf6e9]/95">
@@ -135,26 +123,17 @@ export default async function PlayerProfilePage({
               </div>
             </div>
 
-            {/* Game Stats Counters */}
-            <div className="grid grid-cols-3 gap-2.5 text-center shrink-0">
-              <div className="rpg-slot px-3.5 py-2 border-[#4be3a0]/45">
-                <span className="font-pixel block text-sm text-[#4be3a0]">
-                  {profile.stats.heldCount}
-                </span>
-                <span className="text-[11px] text-[#cfc3e8]">Owned</span>
-              </div>
-              <div className="rpg-slot px-3.5 py-2 border-[#ffd15c]/45">
-                <span className="font-pixel block text-sm text-[#ffd15c]">
-                  {profile.stats.discoveredCount}
-                </span>
-                <span className="text-[11px] text-[#cfc3e8]">Discovered</span>
-              </div>
-              <div className="rpg-slot px-3.5 py-2 border-[#ff4d6d]/45">
-                <span className="font-pixel block text-sm text-[#ff99ac]">
-                  {profile.stats.givenAwayCount}
-                </span>
-                <span className="text-[11px] text-[#cfc3e8]">Given Away</span>
-              </div>
+            {/* Bluesky Profile Button at Top Right */}
+            <div className="shrink-0">
+              <a
+                href={profile.player.bskyProfileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rpg-btn-blue inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-xs"
+              >
+                Bluesky Profile
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
             </div>
           </div>
         </div>
@@ -165,6 +144,10 @@ export default async function PlayerProfilePage({
         playerHandle={profile.player.handle}
         viewerDid={session?.did ?? null}
         initialIsFollowing={profile.isFollowing}
+        heldCount={profile.stats.heldCount}
+        discoveredCount={profile.stats.discoveredCount}
+        createdCount={profile.stats.createdCount}
+        givenAwayCount={profile.stats.givenAwayCount}
         followingCount={profile.stats.followingCount}
         followersCount={profile.stats.followersCount}
         followingList={profile.followingList}

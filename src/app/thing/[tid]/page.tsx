@@ -49,9 +49,9 @@ export default async function ThingInspectorPage({
   const isViewerOwner = session?.did === detail.currentOwner.did;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Main RPG Item Card */}
-      <section className="rpg-panel p-5 sm:p-8">
+      <section className="rpg-panel p-5 sm:p-6">
         <div className="grid gap-6 md:grid-cols-[240px_1fr]">
           {/* Zoomed 16-bit Sprite Showcase */}
           <div className="flex flex-col items-center">
@@ -157,7 +157,7 @@ export default async function ThingInspectorPage({
       {/* Ownership History ("All Previous Owners") */}
       <section
         aria-label="Ownership History"
-        className="rpg-panel p-5 sm:p-7 space-y-5"
+        className="rpg-panel p-5 sm:p-6 space-y-5"
       >
         <div className="flex items-center justify-between gap-2 border-b-2 border-[#9e762a]/50 pb-3">
           <div className="flex items-center gap-2">

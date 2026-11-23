@@ -8,6 +8,7 @@ import {
   Globe,
   RefreshCw,
   Sparkles,
+  User,
   Users,
 } from "lucide-react";
 import type { FeedItemDTO } from "@/lib/queries";
@@ -17,6 +18,8 @@ interface FeedTimelineProps {
   initialGlobalCursor: number | null;
   authenticated: boolean;
 }
+
+type FeedMode = "global" | "following" | "you";
 
 function formatRelativeTime(iso: string): string {
   const diffSec = Math.max(
@@ -40,10 +43,12 @@ export function FeedTimeline({
   const baseId = useId();
   const globalTabId = `${baseId}-global-tab`;
   const followingTabId = `${baseId}-following-tab`;
+  const youTabId = `${baseId}-you-tab`;
   const globalTabRef = useRef<HTMLButtonElement>(null);
   const followingTabRef = useRef<HTMLButtonElement>(null);
+  const youTabRef = useRef<HTMLButtonElement>(null);
 
-  const [mode, setMode] = useState<"global" | "following">("global");
+  const [mode, setMode] = useState<FeedMode>("global");
   const [items, setItems] = useState<FeedItemDTO[]>(initialGlobalItems);
   const [nextCursor, setNextCursor] = useState<number | null>(
     initialGlobalCursor
@@ -51,7 +56,7 @@ export function FeedTimeline({
   const [loading, setLoading] = useState(false);
   const [pendingLiveCount, setPendingLiveCount] = useState(0);
 
-  async function loadFeed(targetMode: "global" | "following", cursor?: number) {
+  async function loadFeed(targetMode: FeedMode, cursor?: number) {
     setLoading(true);
     try {
       const url = new URL("/api/feed", window.location.origin);
@@ -84,7 +89,7 @@ export function FeedTimeline({
     return () => es.close();
   }, []);
 
-  function switchTab(newMode: "global" | "following") {
+  function switchTab(newMode: FeedMode) {
     setMode(newMode);
     setPendingLiveCount(0);
     void loadFeed(newMode);
@@ -92,28 +97,34 @@ export function FeedTimeline({
 
   function handleTabKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (!authenticated) return;
-    if (
-      e.key === "ArrowRight" ||
-      e.key === "ArrowLeft" ||
-      e.key === "Home" ||
-      e.key === "End"
-    ) {
+    const refs = [globalTabRef, followingTabRef, youTabRef];
+    const idx = refs.findIndex((r) => r.current === document.activeElement);
+    if (idx === -1) return;
+
+    if (e.key === "Home") {
       e.preventDefault();
-      // Selection by activation because switching fetches feed data over the network
-      if (e.key === "Home") {
-        globalTabRef.current?.focus();
-      } else if (e.key === "End") {
-        followingTabRef.current?.focus();
-      } else if (document.activeElement === globalTabRef.current) {
-        followingTabRef.current?.focus();
-      } else {
-        globalTabRef.current?.focus();
-      }
+      refs[0]?.current?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      refs[refs.length - 1]?.current?.focus();
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      refs[(idx + 1) % refs.length]?.current?.focus();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      refs[(idx - 1 + refs.length) % refs.length]?.current?.focus();
     }
   }
 
+  const activeTabId =
+    mode === "following"
+      ? followingTabId
+      : mode === "you"
+        ? youTabId
+        : globalTabId;
+
   return (
-    <section aria-label="Things That Happened Feed" className="space-y-4">
+    <section aria-label="Things That Happened Feed" className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div
           role="tablist"
@@ -142,25 +153,53 @@ export function FeedTimeline({
           </button>
 
           {authenticated && (
-            <button
-              ref={followingTabRef}
-              id={followingTabId}
-              type="button"
-              role="tab"
-              aria-selected={mode === "following"}
-              tabIndex={mode === "following" ? 0 : -1}
-              onClick={(e) => {
-                e.currentTarget.scrollIntoView({
-                  block: "nearest",
-                  inline: "nearest",
-                });
-                switchTab("following");
-              }}
-              className="rpg-tab inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
-            >
-              <Users className="h-3.5 w-3.5 text-[#ff99ac]" aria-hidden="true" />
-              Friends
-            </button>
+            <>
+              <button
+                ref={followingTabRef}
+                id={followingTabId}
+                type="button"
+                role="tab"
+                aria-selected={mode === "following"}
+                tabIndex={mode === "following" ? 0 : -1}
+                onClick={(e) => {
+                  e.currentTarget.scrollIntoView({
+                    block: "nearest",
+                    inline: "nearest",
+                  });
+                  switchTab("following");
+                }}
+                className="rpg-tab inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+              >
+                <Users
+                  className="h-3.5 w-3.5 text-[#ff99ac]"
+                  aria-hidden="true"
+                />
+                Following
+              </button>
+
+              <button
+                ref={youTabRef}
+                id={youTabId}
+                type="button"
+                role="tab"
+                aria-selected={mode === "you"}
+                tabIndex={mode === "you" ? 0 : -1}
+                onClick={(e) => {
+                  e.currentTarget.scrollIntoView({
+                    block: "nearest",
+                    inline: "nearest",
+                  });
+                  switchTab("you");
+                }}
+                className="rpg-tab inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+              >
+                <User
+                  className="h-3.5 w-3.5 text-[#ffd15c]"
+                  aria-hidden="true"
+                />
+                You
+              </button>
+            </>
           )}
         </div>
 
@@ -180,161 +219,187 @@ export function FeedTimeline({
         )}
       </div>
 
-      <div
-        role="tabpanel"
-        aria-labelledby={mode === "global" ? globalTabId : followingTabId}
-      >
-        <div className="space-y-4">
-          {items.length === 0 && !loading ? (
-            <div className="rpg-panel-subtle p-8 text-center space-y-2">
-              <p className="font-pixel text-xs text-[#ffd15c]">
-                {mode === "following"
-                  ? "Quiet in Your Circle..."
-                  : "Nothing Has Happened Yet!"}
-              </p>
-              <p className="text-sm text-[#cfc3e8]">
-                {mode === "following" ? (
-                  <>
-                    Head to{" "}
-                    <Link href="/friends" className="text-[#8ec8ff] underline">
-                      FIND MY FRIENDS
-                    </Link>{" "}
-                    on your <strong>YOUR THINGS</strong> page to follow your
-                    Bluesky friends and see what pointless things they unwrap
-                    and give away!
-                  </>
-                ) : (
-                  <>
-                    Head over to{" "}
-                    <Link href="/get" className="text-[#ff99ac] underline">
-                      GET A THING
-                    </Link>{" "}
-                    to unwrap a brand-new daily thing!
-                  </>
-                )}
-              </p>
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {items.map((item) => (
-                <li key={item.id} className="rpg-panel-subtle p-4">
-                  <div className="flex items-start gap-3.5">
-                    {/* 16-bit Sprite Slot */}
-                    <Link
-                      href={`/thing/${item.thing.thingTid}`}
-                      className="rpg-slot flex h-16 w-16 shrink-0 items-center justify-center p-1.5 hover:border-[#4da6ff]"
-                    >
-                      <img
-                        src={item.thing.iconUrl}
-                        alt={item.thing.iconAlt}
-                        width={52}
-                        height={52}
-                        className="pixel-art h-13 w-13 object-contain"
-                      />
-                    </Link>
+      <div className="rpg-tabpanel-stack">
+        <div role="tabpanel" aria-labelledby={activeTabId}>
+          <div className="space-y-4">
+            {items.length === 0 && !loading ? (
+              <div className="rpg-panel-subtle p-8 text-center space-y-2">
+                <p className="font-pixel text-xs text-[#ffd15c]">
+                  {mode === "following"
+                    ? "Quiet in Your Following Feed..."
+                    : mode === "you"
+                      ? "No Activity Involving You Yet!"
+                      : "Nothing Has Happened Yet!"}
+                </p>
+                <p className="text-sm text-[#cfc3e8]">
+                  {mode === "following" ? (
+                    <>
+                      Head to{" "}
+                      <Link
+                        href="/friends"
+                        className="text-[#8ec8ff] underline"
+                      >
+                        FIND MY FRIENDS
+                      </Link>{" "}
+                      on your <strong>YOUR THINGS</strong> page to follow your
+                      friends and see what pointless things they unwrap and give
+                      away!
+                    </>
+                  ) : mode === "you" ? (
+                    <>
+                      Unwrap today&apos;s thing on{" "}
+                      <Link href="/get" className="text-[#ff99ac] underline">
+                        GET A THING
+                      </Link>{" "}
+                      or give a thing to a friend to see every event involving
+                      you right here!
+                    </>
+                  ) : (
+                    <>
+                      Head over to{" "}
+                      <Link href="/get" className="text-[#ff99ac] underline">
+                        GET A THING
+                      </Link>{" "}
+                      to unwrap a brand-new daily thing!
+                    </>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-4">
+                {items.map((item) => (
+                  <li key={item.id} className="rpg-panel-subtle p-4 sm:p-5">
+                    <div className="flex items-start gap-3.5">
+                      {/* 16-bit Sprite Slot */}
+                      <Link
+                        href={`/thing/${item.thing.thingTid}`}
+                        className="rpg-slot flex h-16 w-16 shrink-0 items-center justify-center p-1.5 hover:border-[#4da6ff]"
+                      >
+                        <img
+                          src={item.thing.iconUrl}
+                          alt={item.thing.iconAlt}
+                          width={52}
+                          height={52}
+                          className="pixel-art h-13 w-13 object-contain"
+                        />
+                      </Link>
 
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                        <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Link
+                              href={`/u/${encodeURIComponent(item.actor.handle)}`}
+                              className="font-semibold text-[#ffd15c] hover:underline"
+                            >
+                              @{item.actor.handle}
+                            </Link>
+
+                            {item.eventType === "daily_pull" && (
+                              <span className="text-[#cfc3e8]">
+                                unwrapped a new thing
+                              </span>
+                            )}
+
+                            {(item.eventType as string) === "created" && (
+                              <span className="text-[#c49bff]">
+                                created a new thing
+                              </span>
+                            )}
+
+                            {item.eventType === "direct_gift" && item.target && (
+                              <>
+                                <span className="text-[#cfc3e8]">gave</span>
+                                <ArrowRight
+                                  className="h-3 w-3 text-[#ff4d6d]"
+                                  aria-hidden="true"
+                                />
+                                <Link
+                                  href={`/u/${encodeURIComponent(item.target.handle)}`}
+                                  className="font-semibold text-[#4be3a0] hover:underline"
+                                >
+                                  @{item.target.handle}
+                                </Link>
+                              </>
+                            )}
+
+                            {item.eventType === "escrow_claim" &&
+                              item.target && (
+                                <>
+                                  <span className="text-[#cfc3e8]">
+                                    claimed a set-aside thing from
+                                  </span>
+                                  <Link
+                                    href={`/u/${encodeURIComponent(item.target.handle)}`}
+                                    className="font-semibold text-[#8ec8ff] hover:underline"
+                                  >
+                                    @{item.target.handle}
+                                  </Link>
+                                </>
+                              )}
+                          </div>
+
+                          <span className="text-[11px] text-[#cfc3e8]/75">
+                            {formatRelativeTime(item.createdAtIso)}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
                           <Link
-                            href={`/u/${encodeURIComponent(item.actor.handle)}`}
-                            className="font-semibold text-[#ffd15c] hover:underline"
+                            href={`/thing/${item.thing.thingTid}`}
+                            className="font-semibold text-sm text-[#fdf6e9] hover:text-[#ffd15c]"
                           >
-                            @{item.actor.handle}
+                            <span className="font-pixel text-[11px] text-[#8ec8ff] mr-1.5">
+                              #{String(item.thing.catalogNumber).padStart(
+                                4,
+                                "0"
+                              )}
+                            </span>
+                            {item.thing.name}
                           </Link>
 
-                          {item.eventType === "daily_pull" && (
-                            <span className="text-[#cfc3e8]">
-                              unwrapped a new thing
+                          {item.sequenceNum >= 1 && (
+                            <span className="inline-flex items-center gap-1 rounded bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff99ac]">
+                              {item.sequenceNum >= 3 ? (
+                                <Flame
+                                  className="h-3 w-3"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <Sparkles
+                                  className="h-3 w-3"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              Owner #{item.sequenceNum + 1}
                             </span>
-                          )}
-
-                          {item.eventType === "direct_gift" && item.target && (
-                            <>
-                              <span className="text-[#cfc3e8]">gave</span>
-                              <ArrowRight
-                                className="h-3 w-3 text-[#ff4d6d]"
-                                aria-hidden="true"
-                              />
-                              <Link
-                                href={`/u/${encodeURIComponent(item.target.handle)}`}
-                                className="font-semibold text-[#4be3a0] hover:underline"
-                              >
-                                @{item.target.handle}
-                              </Link>
-                            </>
-                          )}
-
-                          {item.eventType === "escrow_claim" && item.target && (
-                            <>
-                              <span className="text-[#cfc3e8]">
-                                claimed a set-aside thing from
-                              </span>
-                              <Link
-                                href={`/u/${encodeURIComponent(item.target.handle)}`}
-                                className="font-semibold text-[#8ec8ff] hover:underline"
-                              >
-                                @{item.target.handle}
-                              </Link>
-                            </>
                           )}
                         </div>
 
-                        <span className="text-[11px] text-[#cfc3e8]/75">
-                          {formatRelativeTime(item.createdAtIso)}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/thing/${item.thing.thingTid}`}
-                          className="font-semibold text-sm text-[#fdf6e9] hover:text-[#ffd15c]"
-                        >
-                          <span className="font-pixel text-[11px] text-[#8ec8ff] mr-1.5">
-                            #{String(item.thing.catalogNumber).padStart(4, "0")}
-                          </span>
-                          {item.thing.name}
-                        </Link>
-
-                        {item.sequenceNum >= 1 && (
-                          <span className="inline-flex items-center gap-1 rounded bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff99ac]">
-                            {item.sequenceNum >= 3 ? (
-                              <Flame className="h-3 w-3" aria-hidden="true" />
-                            ) : (
-                              <Sparkles
-                                className="h-3 w-3"
-                                aria-hidden="true"
-                              />
-                            )}
-                            Owner #{item.sequenceNum + 1}
-                          </span>
+                        {item.note && (
+                          <blockquote className="rounded border-l-2 border-[#ff4d6d] bg-[#160f24]/85 px-3 py-1.5 text-xs italic text-[#fdf6e9]/90">
+                            &ldquo;{item.note}&rdquo;
+                          </blockquote>
                         )}
                       </div>
-
-                      {item.note && (
-                        <blockquote className="rounded border-l-2 border-[#ff4d6d] bg-[#160f24]/85 px-3 py-1.5 text-xs italic text-[#fdf6e9]/90">
-                          &ldquo;{item.note}&rdquo;
-                        </blockquote>
-                      )}
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          {nextCursor && (
-            <div className="pt-2 text-center">
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void loadFeed(mode, nextCursor)}
-                className="rpg-btn-secondary px-5 py-2.5 font-pixel text-xs"
-              >
-                {loading ? "Loading..." : "Load Older Activity"}
-              </button>
-            </div>
-          )}
+            {nextCursor && (
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void loadFeed(mode, nextCursor)}
+                  className="rpg-btn-secondary px-5 py-2.5 font-pixel text-xs"
+                >
+                  {loading ? "Loading..." : "Load Older Activity"}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>

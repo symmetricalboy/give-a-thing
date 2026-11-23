@@ -242,7 +242,17 @@ body {
   scrollbar-width: none;
   scroll-snap-type: inline proximity;
   gap: 0.5rem;
-  padding-block-end: 0.25rem;
+}
+
+.rpg-tabpanel-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+
+  & > [role="tabpanel"] {
+    grid-area: 1 / 1;
+    min-inline-size: 0;
+    margin: 0;
+  }
 }
 
 .rpg-tablist::-webkit-scrollbar {

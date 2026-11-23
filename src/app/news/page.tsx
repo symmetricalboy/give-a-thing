@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function NewsAboutThingsPage() {
   return (
     <div className="space-y-6">
-      <section aria-label="News About Things Header" className="rpg-panel p-6 sm:p-8">
+      <section aria-label="News About Things Header" className="rpg-panel p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
@@ -41,11 +41,11 @@ export default function NewsAboutThingsPage() {
         </div>
       </section>
 
-      <section aria-label="News Posts" className="space-y-4">
+      <section aria-label="News Posts" className="space-y-6">
         {NEWS_POSTS.map((post) => (
           <article
             key={post.id}
-            className="rpg-panel p-5 sm:p-7 space-y-3 border-l-4 border-l-[#ff4d6d]"
+            className="rpg-panel p-5 sm:p-6 space-y-3 border-l-4 border-l-[#ff4d6d]"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#9e762a]/40 pb-2.5">
               <div className="flex flex-wrap items-center gap-2">

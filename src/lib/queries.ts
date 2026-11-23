@@ -197,7 +197,7 @@ export async function getDailyPullStatus(
 }
 
 export async function getFeedPage(params: {
-  mode: "global" | "following";
+  mode: "global" | "following" | "you";
   viewerDid?: string | null;
   cursorId?: number;
   limit?: number;
@@ -215,6 +215,8 @@ export async function getFeedPage(params: {
       .from(schema.follows)
       .where(eq(schema.follows.followerDid, params.viewerDid));
     followedDids = [params.viewerDid, ...fRows.map((r) => r.subjectDid)];
+  } else if (params.mode === "you" && !params.viewerDid) {
+    return { items: [], nextCursor: null };
   }
 
   const conditions = [];
@@ -226,6 +228,13 @@ export async function getFeedPage(params: {
       or(
         inArray(schema.feedEvents.actorDid, followedDids),
         inArray(schema.feedEvents.targetDid, followedDids)
+      )
+    );
+  } else if (params.mode === "you" && params.viewerDid) {
+    conditions.push(
+      or(
+        eq(schema.feedEvents.actorDid, params.viewerDid),
+        eq(schema.feedEvents.targetDid, params.viewerDid)
       )
     );
   }
@@ -403,7 +412,6 @@ export async function searchDiscoveryCatalog(params: {
   query?: string;
   semantic?: boolean;
   category?: string;
-  sort?: "newest" | "oldest" | "hot_potato";
   page?: number;
   pageSize?: number;
 }): Promise<{
@@ -474,21 +482,25 @@ export async function searchDiscoveryCatalog(params: {
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const orderByClause =
-    params.sort === "oldest"
-      ? asc(schema.things.catalogNumber)
-      : params.sort === "hot_potato"
-        ? [desc(schema.things.transferCount), desc(schema.things.catalogNumber)]
-        : desc(schema.things.catalogNumber);
+  // Always order things by most recent activity (unwrapped/created OR given/claimed)
+  const latestActivityExpr = sql`GREATEST(
+    ${schema.things.createdAt},
+    COALESCE(
+      (
+        SELECT MAX(pe.occurred_at)
+        FROM provenance_entries pe
+        WHERE pe.thing_tid = ${schema.things.thingTid}
+      ),
+      ${schema.things.createdAt}
+    )
+  )`;
 
   const [thingRows, totalRes] = await Promise.all([
     db
       .select()
       .from(schema.things)
       .where(whereClause)
-      .orderBy(
-        ...(Array.isArray(orderByClause) ? orderByClause : [orderByClause])
-      )
+      .orderBy(desc(latestActivityExpr), desc(schema.things.catalogNumber))
       .limit(pageSize)
       .offset(offset),
     db.select({ value: count() }).from(schema.things).where(whereClause),
@@ -510,7 +522,7 @@ export async function searchDirectoryUsers(params: {
   query?: string;
   viewerDid?: string | null;
   limit?: number;
-}): Promise<DirectoryUserCard[]> {
+}): Promise<{ users: DirectoryUserCard[]; totalCount: number }> {
   const limit = Math.min(Math.max(params.limit ?? 24, 1), 50);
   const rawQuery = params.query?.trim() ?? "";
   const cleanQuery = rawQuery.replace(/^@/, "");
@@ -521,13 +533,21 @@ export async function searchDirectoryUsers(params: {
     displayName: string | null;
     avatarUrl: string | null;
   }> = [];
+  let localMatchingCount = 0;
   let viewerFollowSet = new Set<string>();
   let dbAvailable = true;
 
   try {
     const db = getDb();
     const pattern = `%${cleanQuery}%`;
-    const [uRows, fRows] = await Promise.all([
+    const userWhere = cleanQuery
+      ? or(
+          ilike(schema.users.handle, pattern),
+          ilike(schema.users.displayName, pattern)
+        )
+      : undefined;
+
+    const [uRows, countRes, fRows] = await Promise.all([
       db
         .select({
           did: schema.users.did,
@@ -536,16 +556,10 @@ export async function searchDirectoryUsers(params: {
           avatarUrl: schema.users.avatarUrl,
         })
         .from(schema.users)
-        .where(
-          cleanQuery
-            ? or(
-                ilike(schema.users.handle, pattern),
-                ilike(schema.users.displayName, pattern)
-              )
-            : undefined
-        )
+        .where(userWhere)
         .orderBy(desc(schema.users.createdAt))
         .limit(limit),
+      db.select({ value: count() }).from(schema.users).where(userWhere),
       params.viewerDid
         ? db
             .select({ subjectDid: schema.follows.subjectDid })
@@ -554,6 +568,7 @@ export async function searchDirectoryUsers(params: {
         : Promise.resolve([]),
     ]);
     localUsers = uRows;
+    localMatchingCount = Number(countRes[0]?.value ?? 0);
     viewerFollowSet = new Set(fRows.map((f) => f.subjectDid));
   } catch {
     dbAvailable = false;
@@ -674,7 +689,7 @@ export async function searchDirectoryUsers(params: {
     }
   }
 
-  return allEntries
+  const sortedUsers = allEntries
     .map((u) => ({
       did: u.did,
       handle: u.handle,
@@ -694,6 +709,11 @@ export async function searchDirectoryUsers(params: {
       }
       return a.handle.localeCompare(b.handle);
     });
+
+  return {
+    users: sortedUsers,
+    totalCount: Math.max(localMatchingCount, mergedByDid.size),
+  };
 }
 
 function mapThingRowToCard(
@@ -865,6 +885,7 @@ export async function getPlayerProfile(
     stats: {
       heldCount: heldRows.length,
       discoveredCount: Number(discoveredCountRes[0]?.value ?? 0),
+      createdCount: 0,
       givenAwayCount: Number(givenCountRes[0]?.value ?? 0),
       followingCount: followingList.length,
       followersCount: followersList.length,

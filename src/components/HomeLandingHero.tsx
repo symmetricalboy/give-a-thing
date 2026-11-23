@@ -150,7 +150,7 @@ export function HomeLandingHero({
   const [loginOpen, setLoginOpen] = useState(false);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Hero Showcase with Floating Animated 16-Bit Gift Boxes */}
       <section
         aria-label="Welcome to Give a Thing"
@@ -275,10 +275,9 @@ export function HomeLandingHero({
               Pass Things to Any Friend
             </h3>
             <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8]">
-              Give any of your things away at any time with an optional
-              140-character gift note etched forever onto its ownership history.
-              Even friends who haven&apos;t joined yet can get a 24-hour Bluesky
-              claim invite!
+              Give any of your things away at any time with an optional gift
+              note etched forever onto its ownership history. Even friends who
+              haven&apos;t joined yet can get a claim invite link sent to them!
             </p>
           </div>
 
