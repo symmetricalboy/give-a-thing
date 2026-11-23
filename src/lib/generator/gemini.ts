@@ -262,3 +262,95 @@ Style rules:
 
   return Buffer.from(img.data, "base64");
 }
+
+const CUSTOM_SPRITE_BRIEF_SCHEMA = {
+  type: "object",
+  properties: {
+    pixelArtBrief: {
+      type: "string",
+      description:
+        "Concrete visual description (2-4 sentences, under 650 characters) of a single physical emblem representing this custom thing for a 16-bit SNES inventory icon (describe colors, silhouette, and key visual details, zero text).",
+    },
+    suggestedIconAlt: {
+      type: "string",
+      description:
+        "Concise accessible alt text (1 sentence, under 240 characters) describing the 16-bit pixel-art icon for screen readers.",
+    },
+  },
+  required: ["pixelArtBrief", "suggestedIconAlt"],
+};
+
+/**
+ * Generates a standard-style 16-bit Give a Thing sprite from a creator's custom
+ * `.thing` fields (`name`, `category`/collection, `subcategory`, `description`,
+ * `flavorText`, and `uselessTrait`).
+ */
+export async function generateCustomThingRawSpriteFromFields(params: {
+  name: string;
+  category: string;
+  subcategory: string;
+  description: string;
+  flavorText: string;
+  uselessTrait?: string;
+}): Promise<{ rawPng: Buffer; suggestedIconAlt: string }> {
+  const ai = getGenAI();
+
+  const briefPrompt = `Convert this creator-authored pointless thing into a concrete 16-bit SNES RPG inventory icon visual brief and accessible alt text:
+
+Name: ${params.name}
+Collection (Category): ${params.category}
+Subcategory: ${params.subcategory}
+Description: ${params.description}
+Flavor Quote: ${params.flavorText}
+Pointless Trait: ${params.uselessTrait || "None"}
+
+Translate any abstract details into a charming, unmistakable physical object or emblem with clear colors and silhouette, and zero text or letters anywhere in the icon.`;
+
+  const briefTurn = await ai.interactions.create({
+    model: "gemini-4-carbon",
+    system_instruction: SYSTEM_INSTRUCTION,
+    input: briefPrompt,
+    response_format: {
+      type: "text",
+      mime_type: "application/json",
+      schema: CUSTOM_SPRITE_BRIEF_SCHEMA,
+    },
+  });
+
+  const rawJson = (briefTurn.output_text ?? "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  let pixelArtBrief = `${params.name} (${params.subcategory}): ${params.description}`;
+  let suggestedIconAlt = `A 16-bit pixel-art icon of ${params.name}.`;
+
+  if (rawJson) {
+    try {
+      const parsed = JSON.parse(rawJson) as {
+        pixelArtBrief?: string;
+        suggestedIconAlt?: string;
+      };
+      if (parsed.pixelArtBrief?.trim()) {
+        pixelArtBrief = clampTextCleanly(parsed.pixelArtBrief, 1200);
+      }
+      if (parsed.suggestedIconAlt?.trim()) {
+        suggestedIconAlt = clampTextCleanly(parsed.suggestedIconAlt, 290, 580);
+      }
+    } catch {
+      // Fallback to direct field prompt if JSON parse ever fails
+    }
+  }
+
+  const rawPng = await generate16BitSpritePng({
+    name: clampTextCleanly(params.name, 116, 236, true),
+    description: clampTextCleanly(params.description, 490, 1180),
+    flavorText: clampTextCleanly(params.flavorText, 275, 590, true),
+    uselessTrait: clampTextCleanly(params.uselessTrait || "+0 Utility", 78, 156),
+    pixelArtBrief,
+    iconAlt: suggestedIconAlt,
+  });
+
+  return { rawPng, suggestedIconAlt };
+}

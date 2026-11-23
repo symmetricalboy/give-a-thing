@@ -37,6 +37,11 @@ import {
 } from "../src/lib/generator/pull-service";
 import { parseGeneratedThingConcept } from "../src/lib/generator/gemini";
 import { USER_GIVEATHING_COLLECTIONS } from "../src/lib/account/delete-account";
+import {
+  MIN_COLLECTION_ITEMS,
+  validateAndNormalize512Png,
+  validateCollectionUniqueness,
+} from "../src/lib/maker/collection-service";
 import { NEWS_POSTS } from "../src/lib/news";
 
 function collectSourceFiles(dir: string): string[] {
@@ -119,7 +124,7 @@ describe("Give a Thing — Core Engine Verification", () => {
   it("enforces strict minimal ATProtocol OAuth scopes and validates games.atmosphere.define + Top 8 holding slots", () => {
     expect(USER_OAUTH_SCOPES).toContain("atproto");
     expect(USER_OAUTH_SCOPES).toContain(`repo:${LEXICON_NSIDS.HOLDING}`);
-    expect(USER_OAUTH_SCOPES).not.toContain(LEXICON_NSIDS.THING);
+    expect(USER_OAUTH_SCOPES).toContain(`repo:${LEXICON_NSIDS.THING}`);
     expect(USER_OAUTH_SCOPES).not.toContain("app.bsky.feed.post");
 
     const tid1 = nextTid();
@@ -159,11 +164,25 @@ describe("Give a Thing — Core Engine Verification", () => {
       uselessTrait: "+0 Ergonomics",
       icon: { $type: "blob", mimeType: "image/png", size: 4096 },
       iconAlt: "16-bit pixel icon of a thick cream diner coffee mug",
+      createdBy: "did:plc:giveathingapp",
       discoveredBy: "did:plc:alice123",
       pullDate: "2026-11-22",
       createdAt: "2026-11-22T00:01:00.000Z",
     });
     expect(validThing.catalogNumber).toBe(1);
+    expect(validThing.createdBy).toBe("did:plc:giveathingapp");
+
+    const thingLexiconJson = JSON.parse(
+      fs.readFileSync(
+        path.join(process.cwd(), "lexicons", "com", "giveathing", "thing.json"),
+        "utf8"
+      )
+    );
+    expect(thingLexiconJson.defs.main.record.properties.createdBy).toEqual({
+      type: "string",
+      format: "did",
+      description: expect.any(String),
+    });
 
     expect(USER_OAUTH_SCOPES).toContain(`repo:${LEXICON_NSIDS.FAVORITE}`);
 
@@ -507,16 +526,27 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(otherSrc).toContain("https://bsky.app/profile/giveathing.com");
     expect(otherSrc).toContain("DANGER ZONE");
     expect(otherSrc).toContain("rpg-tabpanel-stack");
-    expect(USER_GIVEATHING_COLLECTIONS.length).toBe(6);
+    expect(USER_GIVEATHING_COLLECTIONS.length).toBe(7);
 
     const makePageSrc = fs.readFileSync(
       path.join(process.cwd(), "src", "app", "make", "page.tsx"),
       "utf8"
     );
+    expect(makePageSrc).toContain("isUnlimitedPullAccount");
+    expect(makePageSrc).toContain("MakerStudioClient");
     expect(makePageSrc).toContain("COMING SOON");
     expect(makePageSrc).toContain("MAKE NEW THINGS");
     expect(makePageSrc.toLowerCase()).toContain("collections");
     expect(makePageSrc.toLowerCase()).toContain("sell");
+
+    const makerStudioSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "MakerStudioClient.tsx"),
+      "utf8"
+    );
+    expect(makerStudioSrc).toContain("512×512px PNG");
+    expect(makerStudioSrc).toContain("Generate in Our Standard Style");
+    expect(makerStudioSrc).toContain("Revoke &amp; Destroy");
+    expect(userProfileClientSrc).toContain("MYSTERY BOXES");
 
     const pedestalSrc = fs.readFileSync(
       path.join(process.cwd(), "src", "components", "DailyParcelPedestal.tsx"),
@@ -594,5 +624,127 @@ describe("Give a Thing — Core Engine Verification", () => {
     const meta = await sharp(renderedPng).metadata();
     expect(meta.width).toBe(128);
     expect(meta.height).toBe(128);
+  });
+
+  it("enforces Make New Things 512x512 PNG requirements, >= 5 item minimum, and per-collection uniqueness", async () => {
+    expect(MIN_COLLECTION_ITEMS).toBe(5);
+
+    // 1. Valid 512x512 transparent sticker PNG passes
+    const transparent512 = await sharp({
+      create: {
+        width: 512,
+        height: 512,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    })
+      .composite([
+        {
+          input: await sharp({
+            create: {
+              width: 160,
+              height: 160,
+              channels: 4,
+              background: { r: 255, g: 209, b: 92, alpha: 255 },
+            },
+          })
+            .png()
+            .toBuffer(),
+          left: 176,
+          top: 176,
+        },
+      ])
+      .png()
+      .toBuffer();
+
+    const normalized = await validateAndNormalize512Png(transparent512);
+    expect(normalized.hasTransparency).toBe(true);
+    const meta512 = await sharp(normalized.sprite512Png).metadata();
+    const meta64 = await sharp(normalized.sprite64Png).metadata();
+    expect(meta512.width).toBe(512);
+    expect(meta512.height).toBe(512);
+    expect(meta64.width).toBe(64);
+    expect(meta64.height).toBe(64);
+
+    // 2. Wrong dimensions (256x256 PNG) rejected
+    const wrongSizePng = await sharp({
+      create: {
+        width: 256,
+        height: 256,
+        channels: 4,
+        background: { r: 255, g: 0, b: 0, alpha: 255 },
+      },
+    })
+      .png()
+      .toBuffer();
+    await expect(validateAndNormalize512Png(wrongSizePng)).rejects.toThrow(
+      /512x512px/
+    );
+
+    // 3. Wrong format (512x512 JPEG) rejected
+    const jpeg512 = await sharp({
+      create: {
+        width: 512,
+        height: 512,
+        channels: 3,
+        background: { r: 255, g: 0, b: 0 },
+      },
+    })
+      .jpeg()
+      .toBuffer();
+    await expect(validateAndNormalize512Png(jpeg512)).rejects.toThrow(/PNG/);
+
+    const samplePngDataUrl = `data:image/png;base64,${transparent512.toString("base64")}`;
+    const makeDraft = (name: string) => ({
+      name,
+      subcategory: "Prize Counter Relics",
+      description: "A charmingly specific plastic trinket from a roller rink.",
+      flavorText: "Still carries a faint memory of pretzel salt.",
+      uselessTrait: "+1 Pocket Clutter",
+      iconAlt: "Pixel-art icon of a roller rink trinket.",
+      spriteDataUrl: samplePngDataUrl,
+    });
+
+    // 4. Fewer than 5 items rejected
+    expect(() =>
+      validateCollectionUniqueness({
+        collectionName: "Roller Rink Leftovers",
+        items: [
+          makeDraft("Neon Whistle Ring"),
+          makeDraft("Velvet Skate Lace"),
+          makeDraft("Plastic Trophy Base"),
+          makeDraft("Warped Arcade Token"),
+        ],
+      })
+    ).toThrow(/at least 5/);
+
+    // 5. Duplicate item names within a 5-item collection rejected
+    expect(() =>
+      validateCollectionUniqueness({
+        collectionName: "Roller Rink Leftovers",
+        items: [
+          makeDraft("The Neon Whistle Ring"),
+          makeDraft("Velvet Skate Lace"),
+          makeDraft("Plastic Trophy Base"),
+          makeDraft("Warped Arcade Token"),
+          makeDraft("Whistle Ring, Neon!"),
+        ],
+      })
+    ).toThrow(/unique/i);
+
+    // 6. Five distinct items pass cleanly
+    const validSet = validateCollectionUniqueness({
+      collectionName: "Roller Rink Leftovers",
+      collectionDescription: "Forgotten prizes from the bottom shelf.",
+      items: [
+        makeDraft("Neon Whistle Ring"),
+        makeDraft("Velvet Skate Lace"),
+        makeDraft("Plastic Trophy Base"),
+        makeDraft("Warped Arcade Token"),
+        makeDraft("Faded Nacho Ticket Stub"),
+      ],
+    });
+    expect(validSet.parsed.items.length).toBe(5);
+    expect(new Set(validSet.fingerprints).size).toBe(5);
   });
 });

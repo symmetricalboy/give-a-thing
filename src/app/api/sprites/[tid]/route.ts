@@ -23,14 +23,29 @@ export async function GET(
     return new NextResponse("Sprite not found", { status: 404 });
   }
 
-  const buf64 = Buffer.from(base64, "base64");
-  const outBuf =
-    targetSize === 64
-      ? buf64
-      : await sharp(buf64)
-          .resize(512, 512, { kernel: sharp.kernel.nearest })
-          .png({ compressionLevel: 9, palette: true, colors: 48 })
-          .toBuffer();
+  const storedBuf = Buffer.from(base64, "base64");
+  const meta = await sharp(storedBuf).metadata();
+
+  let outBuf: Buffer;
+  if (meta.width === 512 && meta.height === 512) {
+    // Custom 512x512 creator PNG upload — preserve full artwork fidelity at 512x512
+    outBuf =
+      targetSize === 512
+        ? storedBuf
+        : await sharp(storedBuf)
+            .resize(64, 64, { fit: "contain" })
+            .png({ compressionLevel: 9 })
+            .toBuffer();
+  } else {
+    // Canonical 64x64 16-bit pixel sprite — upscale crisply with nearest-neighbor
+    outBuf =
+      targetSize === 64
+        ? storedBuf
+        : await sharp(storedBuf)
+            .resize(512, 512, { kernel: sharp.kernel.nearest })
+            .png({ compressionLevel: 9, palette: true, colors: 48 })
+            .toBuffer();
+  }
 
   return new NextResponse(new Uint8Array(outBuf), {
     status: 200,

@@ -5,11 +5,13 @@ import { LEXICON_NSIDS } from "@/lib/lexicons";
 import { followPlayer } from "@/lib/social/follows";
 import { flushPendingPdsSyncsForUser } from "@/lib/atproto/user-pds";
 import {
+  backfillCreatedByOnAppPds,
   isAppPdsConfigured,
   migrateLegacyLedgerRecordsOnAppPds,
   publishAtmosphereGameDefineOnAppPds,
 } from "@/lib/atproto/app-pds";
 import { healMissingCatalogGaps } from "@/lib/generator/pull-service";
+import { revokeAndDestroyCreatedThing } from "@/lib/maker/collection-service";
 
 const globalForBg = globalThis as unknown as {
   bgStarted?: boolean;
@@ -39,11 +41,15 @@ export function startBackgroundServices(): void {
 
   globalForBg.bgStarted = true;
 
-  // 1. Migrate any legacy ledgerEntry records & update games.atmosphere.define on @giveathing.com PDS
+  // 1. Migrate legacy ledgerEntry records, backfill createdBy, & update games.atmosphere.define on @giveathing.com PDS
   if (isAppPdsConfigured()) {
     void migrateLegacyLedgerRecordsOnAppPds()
       .catch((err) => {
         console.warn("[app-pds] Legacy ledger migration warning:", err);
+      })
+      .then(() => backfillCreatedByOnAppPds())
+      .catch((err) => {
+        console.warn("[app-pds] createdBy backfill warning:", err);
       })
       .finally(() => {
         void publishAtmosphereGameDefineOnAppPds()
@@ -160,6 +166,20 @@ async function startJetstreamLoop() {
     }
 
     if (
+      evt.commit.collection === LEXICON_NSIDS.THING &&
+      evt.commit.operation === "delete" &&
+      allUsersCache.has(evt.did)
+    ) {
+      const thingTid = evt.commit.rkey;
+      await revokeAndDestroyCreatedThing({
+        thingTid,
+        actorDid: evt.did,
+        skipCreatorPdsDelete: true,
+      }).catch(() => {});
+      return;
+    }
+
+    if (
       evt.commit.collection === LEXICON_NSIDS.HOLDING &&
       evt.commit.operation === "delete" &&
       allUsersCache.has(evt.did)
@@ -224,6 +244,7 @@ async function startJetstreamLoop() {
     const wsUrl = new URL(jetstreamBase);
     wsUrl.searchParams.append("wantedCollections", "app.bsky.graph.follow");
     wsUrl.searchParams.append("wantedCollections", LEXICON_NSIDS.HOLDING);
+    wsUrl.searchParams.append("wantedCollections", LEXICON_NSIDS.THING);
     if (savedRows[0]?.timeUs) {
       wsUrl.searchParams.set("cursor", savedRows[0].timeUs);
     }

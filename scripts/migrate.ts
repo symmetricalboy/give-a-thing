@@ -60,13 +60,45 @@ async function main() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       ALTER TABLE things ADD COLUMN IF NOT EXISTS pull_slot INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE things ADD COLUMN IF NOT EXISTS created_by_did TEXT REFERENCES users(did);
+      ALTER TABLE things ADD COLUMN IF NOT EXISTS collection_id TEXT;
       DROP INDEX IF EXISTS things_discoverer_utc_date_idx;
       CREATE UNIQUE INDEX IF NOT EXISTS things_discoverer_utc_date_slot_idx ON things (discoverer_did, pull_utc_date, pull_slot);
       CREATE INDEX IF NOT EXISTS things_embedding_hnsw_idx ON things USING hnsw (embedding vector_cosine_ops);
       CREATE INDEX IF NOT EXISTS things_owner_idx ON things (current_owner_did);
+      CREATE INDEX IF NOT EXISTS things_created_by_idx ON things (created_by_did);
+      CREATE INDEX IF NOT EXISTS things_collection_idx ON things (collection_id);
       CREATE INDEX IF NOT EXISTS things_category_idx ON things (category);
       CREATE INDEX IF NOT EXISTS things_transfer_count_idx ON things (transfer_count);
       CREATE INDEX IF NOT EXISTS things_created_at_idx ON things (created_at);
+
+      CREATE TABLE IF NOT EXISTS thing_collections (
+        collection_tid TEXT PRIMARY KEY,
+        creator_did TEXT NOT NULL REFERENCES users(did) ON DELETE CASCADE,
+        name VARCHAR(100) NOT NULL,
+        description VARCHAR(280),
+        total_items INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS thing_collections_creator_idx ON thing_collections (creator_did);
+
+      CREATE TABLE IF NOT EXISTS collection_daily_claims (
+        collection_tid TEXT NOT NULL REFERENCES thing_collections(collection_tid) ON DELETE CASCADE,
+        claimer_did TEXT NOT NULL REFERENCES users(did) ON DELETE CASCADE,
+        pull_utc_date VARCHAR(10) NOT NULL,
+        thing_tid TEXT NOT NULL,
+        claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (collection_tid, claimer_did, pull_utc_date)
+      );
+      CREATE INDEX IF NOT EXISTS collection_claims_claimer_idx ON collection_daily_claims (claimer_did, pull_utc_date);
+
+      -- Backfill created_by_did on all existing generated things to @giveathing.com
+      UPDATE things
+      SET created_by_did = COALESCE(
+        (SELECT did FROM users WHERE lower(handle) = 'giveathing.com' LIMIT 1),
+        discoverer_did
+      )
+      WHERE created_by_did IS NULL;
 
       CREATE TABLE IF NOT EXISTS user_favorite_things (
         user_did TEXT NOT NULL REFERENCES users(did) ON DELETE CASCADE,

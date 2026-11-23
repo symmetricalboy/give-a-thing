@@ -54,6 +54,8 @@ export const things = pgTable(
     iconBlobCid: text("icon_blob_cid"),
     iconUrl: text("icon_url").notNull(),
     spritePngBase64: text("sprite_png_base64"),
+    createdByDid: text("created_by_did").references(() => users.did),
+    collectionId: text("collection_id"),
     discovererDid: text("discoverer_did")
       .notNull()
       .references(() => users.did),
@@ -84,6 +86,8 @@ export const things = pgTable(
       table.embedding.op("vector_cosine_ops")
     ),
     index("things_owner_idx").on(table.currentOwnerDid),
+    index("things_created_by_idx").on(table.createdByDid),
+    index("things_collection_idx").on(table.collectionId),
     index("things_category_idx").on(table.category),
     index("things_transfer_count_idx").on(table.transferCount),
     index("things_created_at_idx").on(table.createdAt),
@@ -311,8 +315,54 @@ export const jetstreamCursor = pgTable("jetstream_cursor", {
     .defaultNow(),
 });
 
+export const thingCollections = pgTable(
+  "thing_collections",
+  {
+    collectionTid: text("collection_tid").primaryKey(),
+    creatorDid: text("creator_did")
+      .notNull()
+      .references(() => users.did, { onDelete: "cascade" }),
+    name: varchar("name", { length: 100 }).notNull(),
+    description: varchar("description", { length: 280 }),
+    totalItems: integer("total_items").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("thing_collections_creator_idx").on(table.creatorDid)]
+);
+
+export const collectionDailyClaims = pgTable(
+  "collection_daily_claims",
+  {
+    collectionTid: text("collection_tid")
+      .notNull()
+      .references(() => thingCollections.collectionTid, {
+        onDelete: "cascade",
+      }),
+    claimerDid: text("claimer_did")
+      .notNull()
+      .references(() => users.did, { onDelete: "cascade" }),
+    pullUtcDate: varchar("pull_utc_date", { length: 10 }).notNull(),
+    thingTid: text("thing_tid").notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.collectionTid, table.claimerDid, table.pullUtcDate],
+    }),
+    index("collection_claims_claimer_idx").on(
+      table.claimerDid,
+      table.pullUtcDate
+    ),
+  ]
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type ThingRow = typeof things.$inferSelect;
+export type ThingCollectionRow = typeof thingCollections.$inferSelect;
 export type ProvenanceEntryRow = typeof provenanceEntries.$inferSelect;
 export type EscrowOfferRow = typeof escrowOffers.$inferSelect;
 export type FeedEventRow = typeof feedEvents.$inferSelect;

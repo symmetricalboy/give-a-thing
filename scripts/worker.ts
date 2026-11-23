@@ -4,6 +4,7 @@ import { getDb, schema } from "../src/db";
 import { LEXICON_NSIDS } from "../src/lib/lexicons";
 import { followPlayer } from "../src/lib/social/follows";
 import { flushPendingPdsSyncsForUser } from "../src/lib/atproto/user-pds";
+import { revokeAndDestroyCreatedThing } from "../src/lib/maker/collection-service";
 
 /**
  * Give a Thing — ATProtocol Jetstream & Reconciliation Worker
@@ -118,7 +119,22 @@ async function handleJetstreamMessage(evt: JetstreamEvent) {
     return;
   }
 
-  // 3. Indestructible Thing Guard: restore holding if deleted externally while still owned
+  // 3. Creator Revocation Guard: if a creator deletes their genesis com.giveathing.thing record, destroy the thing
+  if (
+    evt.commit.collection === LEXICON_NSIDS.THING &&
+    evt.commit.operation === "delete" &&
+    allUsersCache.has(evt.did)
+  ) {
+    const thingTid = evt.commit.rkey;
+    await revokeAndDestroyCreatedThing({
+      thingTid,
+      actorDid: evt.did,
+      skipCreatorPdsDelete: true,
+    }).catch(() => {});
+    return;
+  }
+
+  // 4. Indestructible Thing Guard: restore holding if deleted externally while still owned
   if (
     evt.commit.collection === LEXICON_NSIDS.HOLDING &&
     evt.commit.operation === "delete" &&
@@ -197,6 +213,7 @@ async function startWorker() {
     const wsUrl = new URL(JETSTREAM_BASE);
     wsUrl.searchParams.append("wantedCollections", "app.bsky.graph.follow");
     wsUrl.searchParams.append("wantedCollections", LEXICON_NSIDS.HOLDING);
+    wsUrl.searchParams.append("wantedCollections", LEXICON_NSIDS.THING);
     if (saved) {
       wsUrl.searchParams.set("cursor", saved);
     }

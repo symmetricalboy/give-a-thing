@@ -17,6 +17,7 @@ export const ATMOSPHERE_GAME_RKEY = "giveathing";
 
 export const USER_OAUTH_SCOPES = [
   "atproto",
+  `repo:${LEXICON_NSIDS.THING}`,
   `repo:${LEXICON_NSIDS.HOLDING}`,
   `repo:${LEXICON_NSIDS.FAVORITE}`,
   `repo:${LEXICON_NSIDS.TRANSFER}`,
@@ -73,6 +74,7 @@ export const ThingRecordSchema = z.object({
   uselessTrait: z.string().max(160).optional(),
   icon: z.any(),
   iconAlt: z.string().min(1).max(600),
+  createdBy: z.string().startsWith("did:").optional(),
   discoveredBy: z.string().startsWith("did:"),
   pullDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   createdAt: z.string(),

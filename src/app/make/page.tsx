@@ -10,6 +10,15 @@ import {
   Sparkles,
   Store,
 } from "lucide-react";
+import { MakerStudioClient } from "@/components/MakerStudioClient";
+import { isUnlimitedPullAccount } from "@/lib/generator/pull-service";
+import {
+  listCreatorCollectionsForStudio,
+  type CreatorStudioCollectionSummary,
+} from "@/lib/maker/collection-service";
+import { getCurrentSession } from "@/lib/session";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Make New Things",
@@ -17,11 +26,33 @@ export const metadata: Metadata = {
     "Coming soon: create your own custom collections of pointless 16-bit things to share, gift, or sell.",
 };
 
-export default function MakeThingsPage() {
+export default async function MakeThingsPage() {
+  const session = await getCurrentSession();
+  const isMakerUnlocked = session ? isUnlimitedPullAccount(session) : false;
+
+  if (isMakerUnlocked && session) {
+    let initialCollections: CreatorStudioCollectionSummary[] = [];
+    try {
+      initialCollections = await listCreatorCollectionsForStudio(session.did);
+    } catch (err) {
+      console.warn("[/make] Could not load creator collections:", err);
+    }
+
+    return (
+      <MakerStudioClient
+        initialCollections={initialCollections}
+        creatorHandle={session.handle}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Main Coming Soon Showcase */}
-      <section aria-label="Make New Things Coming Soon" className="rpg-panel overflow-hidden">
+      <section
+        aria-label="Make New Things Coming Soon"
+        className="rpg-panel overflow-hidden"
+      >
         <div className="candy-ribbon w-full" aria-hidden="true" />
 
         <div className="p-6 sm:p-10 text-center space-y-5">
@@ -67,7 +98,10 @@ export default function MakeThingsPage() {
       </section>
 
       {/* Upcoming Workshop Features */}
-      <section aria-label="Upcoming Workshop Details" className="grid gap-4 md:grid-cols-3">
+      <section
+        aria-label="Upcoming Workshop Details"
+        className="grid gap-4 md:grid-cols-3"
+      >
         <article className="rpg-panel-red p-5 space-y-2.5">
           <div className="inline-flex items-center gap-2 rounded bg-[#ff4d6d]/20 px-2.5 py-1 font-pixel text-[10px] text-[#ff99ac]">
             <Palette className="h-3.5 w-3.5" aria-hidden="true" />

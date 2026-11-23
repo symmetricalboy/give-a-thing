@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "record",
-      "description": "Immutable genesis record of a pointless thing discovered on Give a Thing. Stored exclusively in the official Give a Thing repository (@giveathing.com).",
+      "description": "Genesis record of a unique pointless thing on Give a Thing. Stored in the creator's repository (@giveathing.com for generated daily pulls, or the creator's PDS for custom collections).",
       "key": "tid",
       "record": {
         "type": "object",
@@ -36,12 +36,12 @@
           "category": {
             "type": "string",
             "maxLength": 100,
-            "description": "Macro-category of the thing."
+            "description": "Macro-category of the thing (or custom collection name)."
           },
           "subcategory": {
             "type": "string",
             "maxLength": 120,
-            "description": "Specific subcategory seed."
+            "description": "Specific subcategory or aisle within the category/collection."
           },
           "description": {
             "type": "string",
@@ -65,23 +65,28 @@
             "type": "blob",
             "accept": ["image/png"],
             "maxSize": 1000000,
-            "description": "16-bit pixel-art inventory icon sprite PNG."
+            "description": "512x512 inventory icon sprite PNG."
           },
           "iconAlt": {
             "type": "string",
             "maxLength": 600,
             "maxGraphemes": 300,
-            "description": "Accessible alt text describing the 16-bit sprite."
+            "description": "Accessible alt text describing the sprite."
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the account that created this thing (@giveathing.com for generated pulls, or the collection creator's DID)."
           },
           "discoveredBy": {
             "type": "string",
             "format": "did",
-            "description": "DID of the player who discovered this thing via daily pull."
+            "description": "DID of the player who discovered or unboxed this thing."
           },
           "pullDate": {
             "type": "string",
             "maxLength": 10,
-            "description": "UTC date (YYYY-MM-DD) when this thing was pulled."
+            "description": "UTC date (YYYY-MM-DD) when this thing was created or pulled."
           },
           "createdAt": {
             "type": "string",

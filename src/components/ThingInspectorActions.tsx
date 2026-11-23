@@ -2,8 +2,17 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, ExternalLink, RotateCcw, Send } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Loader2,
+  RotateCcw,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { GiveThingModal, type GiveableThingSummary } from "./GiveThingModal";
+import { RpgModal } from "./RpgModal";
 
 interface ActiveEscrowView {
   offerTid: string;
@@ -18,6 +27,7 @@ interface ThingInspectorActionsProps {
   thing: GiveableThingSummary;
   status: "held" | "escrowed";
   isViewerOwner: boolean;
+  isViewerCreator?: boolean;
   activeEscrow: ActiveEscrowView | null;
 }
 
@@ -33,6 +43,7 @@ export function ThingInspectorActions({
   thing,
   status,
   isViewerOwner,
+  isViewerCreator = false,
   activeEscrow,
 }: ThingInspectorActionsProps) {
   const router = useRouter();
@@ -42,13 +53,18 @@ export function ThingInspectorActions({
   const [revokeErr, setRevokeErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Creator genesis revocation modal state
+  const [destroyOpen, setDestroyOpen] = useState(false);
+  const [destroying, setDestroying] = useState(false);
+  const [destroyErr, setDestroyErr] = useState<string | null>(null);
+
   useEffect(() => {
     if (!activeEscrow) return;
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
   }, [activeEscrow]);
 
-  if (!isViewerOwner) return null;
+  if (!isViewerOwner && !isViewerCreator) return null;
 
   const canRevoke =
     activeEscrow && nowMs >= new Date(activeEscrow.revocableAfterIso).getTime();
@@ -74,101 +90,203 @@ export function ThingInspectorActions({
     }
   }
 
-  if (status === "escrowed" && activeEscrow) {
-    return (
-      <div className="space-y-3 rounded border-2 border-[#4da6ff] bg-[#4da6ff]/10 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-pixel text-xs text-[#8ec8ff]">
-            Set Aside for @{activeEscrow.recipientHandle}
-          </p>
-          {!canRevoke && (
-            <span className="text-xs text-[#fdf6e9]">
-              Returnable in{" "}
-              <strong className="font-pixel">
-                {formatRemainingWindow(activeEscrow.revocableAfterIso, nowMs)}
-              </strong>
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <a
-            href={activeEscrow.composerIntentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rpg-btn-blue inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-[11px]"
-          >
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            Mention on Bluesky
-          </a>
-
-          <button
-            type="button"
-            onClick={async () => {
-              await navigator.clipboard.writeText(activeEscrow.claimUrl);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }}
-            className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 font-pixel text-[11px]"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-[#4be3a0]" />
-                Copied Link
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5" />
-                Copy Claim Link
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            disabled={!canRevoke || revoking}
-            onClick={handleRevoke}
-            title={
-              canRevoke
-                ? "Return this thing to your active collection"
-                : "Available after 24 hours if unclaimed"
-            }
-            className="rpg-btn-secondary inline-flex items-center gap-1.5 border-[#ff4d6d]/60 px-3 py-2 font-pixel text-[11px] text-[#ff99ac]"
-          >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-            {revoking
-              ? "Returning..."
-              : canRevoke
-                ? "Return Thing"
-                : "Locked (24h)"}
-          </button>
-        </div>
-
-        {revokeErr && (
-          <p role="alert" className="text-xs text-[#ff99ac]">
-            {revokeErr}
-          </p>
-        )}
-      </div>
-    );
+  async function handleCreatorDestroy() {
+    setDestroying(true);
+    setDestroyErr(null);
+    try {
+      const res = await fetch(
+        `/api/maker/things/${encodeURIComponent(thing.thingTid)}/revoke`,
+        { method: "POST" }
+      );
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setDestroyErr(data.error ?? "Could not revoke and destroy this thing.");
+        setDestroying(false);
+        return;
+      }
+      setDestroyOpen(false);
+      router.push("/profile");
+      router.refresh();
+    } catch {
+      setDestroyErr("Network error while destroying thing.");
+      setDestroying(false);
+    }
   }
 
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setGiveOpen(true)}
-        className="rpg-btn-red inline-flex items-center gap-2 px-5 py-3 font-pixel text-xs"
-      >
-        <Send className="h-4 w-4" aria-hidden="true" />
-        Give This Thing Away
-      </button>
+    <div className="space-y-3">
+      {isViewerOwner && status === "escrowed" && activeEscrow ? (
+        <div className="space-y-3 rounded border-2 border-[#4da6ff] bg-[#4da6ff]/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-pixel text-xs text-[#8ec8ff]">
+              Set Aside for @{activeEscrow.recipientHandle}
+            </p>
+            {!canRevoke && (
+              <span className="text-xs text-[#fdf6e9]">
+                Returnable in{" "}
+                <strong className="font-pixel">
+                  {formatRemainingWindow(activeEscrow.revocableAfterIso, nowMs)}
+                </strong>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <a
+              href={activeEscrow.composerIntentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rpg-btn-blue inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-[11px]"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              Mention on Bluesky
+            </a>
+
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(activeEscrow.claimUrl);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 font-pixel text-[11px]"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-[#4be3a0]" />
+                  Copied Link
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" />
+                  Copy Claim Link
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              disabled={!canRevoke || revoking}
+              onClick={handleRevoke}
+              title={
+                canRevoke
+                  ? "Return this thing to your active collection"
+                  : "Available after 24 hours if unclaimed"
+              }
+              className="rpg-btn-secondary inline-flex items-center gap-1.5 border-[#ff4d6d]/60 px-3 py-2 font-pixel text-[11px] text-[#ff99ac]"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              {revoking
+                ? "Returning..."
+                : canRevoke
+                  ? "Return Thing"
+                  : "Locked (24h)"}
+            </button>
+          </div>
+
+          {revokeErr && (
+            <p role="alert" className="text-xs text-[#ff99ac]">
+              {revokeErr}
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        {isViewerOwner && status === "held" ? (
+          <button
+            type="button"
+            onClick={() => setGiveOpen(true)}
+            className="rpg-btn-red inline-flex items-center gap-2 px-5 py-3 font-pixel text-xs"
+          >
+            <Send className="h-4 w-4" aria-hidden="true" />
+            Give This Thing Away
+          </button>
+        ) : null}
+
+        {isViewerCreator ? (
+          <button
+            type="button"
+            onClick={() => {
+              setDestroyErr(null);
+              setDestroyOpen(true);
+            }}
+            className="rpg-btn-secondary inline-flex items-center gap-2 border-[#ff4d6d]/60 px-4 py-3 font-pixel text-[11px] text-[#ff99ac]"
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Revoke &amp; Destroy Thing
+          </button>
+        ) : null}
+      </div>
 
       <GiveThingModal
         open={giveOpen}
         onClose={() => setGiveOpen(false)}
         thing={thing}
       />
+
+      <RpgModal
+        open={destroyOpen}
+        onClose={() => {
+          if (!destroying) setDestroyOpen(false);
+        }}
+        title="REVOKE & DESTROY THING?"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[#fdf6e9] leading-relaxed">
+            Permanently revoke and destroy{" "}
+            <strong>
+              #{String(thing.catalogNumber).padStart(4, "0")} {thing.name}
+            </strong>
+            ?
+          </p>
+          <p className="text-xs text-[#cfc3e8] leading-relaxed">
+            As this item&apos;s creator, deleting its genesis{" "}
+            <code className="text-[#8ec8ff]">.thing</code> record from your
+            Personal Data Server (PDS) permanently destroys it everywhere on
+            Give a Thing.
+          </p>
+
+          {destroyErr ? (
+            <p role="alert" className="text-xs text-[#ff99ac]">
+              Error: {destroyErr}
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              autoFocus
+              disabled={destroying}
+              onClick={() => setDestroyOpen(false)}
+              className="rpg-btn-secondary px-4 py-2 font-pixel text-xs"
+            >
+              Keep Thing
+            </button>
+            <button
+              type="button"
+              disabled={destroying}
+              onClick={handleCreatorDestroy}
+              className="rpg-btn-red inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+            >
+              {destroying ? (
+                <>
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                  Destroying…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  Revoke &amp; Destroy
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </RpgModal>
     </div>
   );
 }

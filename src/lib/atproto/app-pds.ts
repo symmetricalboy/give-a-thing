@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { AtpAgent, type AtpSessionData } from "@atproto/api";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import {
   ATMOSPHERE_GAME_RKEY,
@@ -165,6 +165,7 @@ export async function mintCanonicalThingOnAppPds(
       uselessTrait: params.uselessTrait,
       icon: blobRef,
       iconAlt: params.iconAlt,
+      createdBy: repo,
       discoveredBy: params.discoveredByDid,
       pullDate: params.pullUtcDate,
       createdAt: params.createdAtIso,
@@ -315,6 +316,83 @@ export async function migrateLegacyLedgerRecordsOnAppPds(): Promise<void> {
         collection: legacyCollection,
         rkey,
       });
+    }
+
+    cursor = res.data.cursor;
+  } while (cursor);
+}
+
+/**
+ * Idempotently backfills `createdBy` (`@giveathing.com` DID) onto all generated
+ * `things` rows in PostgreSQL AND onto any existing genesis `com.giveathing.thing`
+ * records in `@giveathing.com`'s PDS that predate the `createdBy` field.
+ */
+export async function backfillCreatedByOnAppPds(): Promise<void> {
+  const agent = await getAppPdsAgent();
+  if (!agent || !agent.session) return;
+
+  const repoDid = agent.session.did;
+  const db = getDb();
+
+  // Ensure @giveathing.com user row exists before setting FK
+  await db
+    .insert(schema.users)
+    .values({
+      did: repoDid,
+      handle: agent.session.handle || "giveathing.com",
+      displayName: "Give a Thing",
+    })
+    .onConflictDoNothing();
+
+  // Backfill any generated DB rows whose created_by_did is null or was previously defaulted to discoverer
+  await db
+    .update(schema.things)
+    .set({ createdByDid: repoDid })
+    .where(
+      and(
+        isNull(schema.things.collectionId),
+        isNull(schema.things.createdByDid)
+      )
+    );
+
+  let cursor: string | undefined;
+  do {
+    const res = await agent.com.atproto.repo.listRecords({
+      repo: repoDid,
+      collection: LEXICON_NSIDS.THING,
+      limit: 100,
+      cursor,
+    });
+    const records = res.data.records ?? [];
+    if (records.length === 0) break;
+
+    for (const item of records) {
+      const rkey = item.uri.split("/").pop();
+      if (!rkey) continue;
+      const val = item.value as Record<string, unknown>;
+      if (typeof val.createdBy === "string" && val.createdBy.startsWith("did:")) {
+        continue;
+      }
+
+      const putRes = await agent.com.atproto.repo.putRecord({
+        repo: repoDid,
+        collection: LEXICON_NSIDS.THING,
+        rkey,
+        record: {
+          ...val,
+          $type: LEXICON_NSIDS.THING,
+          createdBy: repoDid,
+        },
+      });
+
+      await db
+        .update(schema.things)
+        .set({
+          createdByDid: repoDid,
+          canonicalAtUri: putRes.data.uri,
+          canonicalAtCid: putRes.data.cid,
+        })
+        .where(eq(schema.things.thingTid, rkey));
     }
 
     cursor = res.data.cursor;

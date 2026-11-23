@@ -143,6 +143,9 @@ export default async function PlayerProfilePage({
         playerDid={profile.player.did}
         playerHandle={profile.player.handle}
         viewerDid={session?.did ?? null}
+        viewerUnlimitedPulls={profile.viewerUnlimitedPulls}
+        nextPullUtcIso={profile.nextPullUtcIso}
+        activeCollections={profile.activeCollections}
         initialIsFollowing={profile.isFollowing}
         heldCount={profile.stats.heldCount}
         discoveredCount={profile.stats.discoveredCount}

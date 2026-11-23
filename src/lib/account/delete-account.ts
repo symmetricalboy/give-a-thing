@@ -19,6 +19,7 @@ import {
 } from "@/lib/lexicons";
 
 export const USER_GIVEATHING_COLLECTIONS = [
+  LEXICON_NSIDS.THING,
   LEXICON_NSIDS.HOLDING,
   LEXICON_NSIDS.FAVORITE,
   LEXICON_NSIDS.TRANSFER,
@@ -250,6 +251,11 @@ export async function permanentlyDeleteUserAccount(
       .update(schema.things)
       .set({ discovererDid: houseUser.did })
       .where(eq(schema.things.discovererDid, userDid));
+
+    await db
+      .update(schema.things)
+      .set({ createdByDid: houseUser.did })
+      .where(eq(schema.things.createdByDid, userDid));
   }
 
   // Step 2: Wipe all `com.giveathing.*` records from the user's own ATmosphere PDS

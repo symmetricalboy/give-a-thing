@@ -7,20 +7,28 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Clock,
   Copy,
   ExternalLink,
+  Gift,
   RotateCcw,
+  ScrollText,
   Search,
   Send,
+  Sparkles,
   Star,
   UserCheck,
   UserPlus,
   Users,
 } from "lucide-react";
-import type { ProfileSocialUser, ThingCardItem } from "@/lib/queries";
+import type {
+  ProfileMysteryBoxCollection,
+  ProfileSocialUser,
+  ThingCardItem,
+} from "@/lib/queries";
 import { RpgModal } from "./RpgModal";
 import { ThingGridCard } from "./ThingGridCard";
-import { GiveThingModal } from "./GiveThingModal";
+import { GiveThingModal, type GiveableThingSummary } from "./GiveThingModal";
 
 export interface OutgoingEscrowItem {
   offerTid: string;
@@ -38,10 +46,36 @@ export interface OutgoingEscrowItem {
   composerIntentUrl: string;
 }
 
+interface ClaimedCollectionThingView {
+  thingTid: string;
+  catalogNumber: number;
+  name: string;
+  category: string;
+  subcategory: string;
+  description: string;
+  flavorText: string;
+  uselessTrait: string;
+  iconUrl: string;
+  iconAlt: string;
+}
+
+function formatUtcCountdown(targetIso: string, nowMs: number): string {
+  const diff = Math.max(0, new Date(targetIso).getTime() - nowMs);
+  const hours = Math.floor(diff / 3_600_000);
+  const minutes = Math.floor((diff % 3_600_000) / 60_000);
+  const seconds = Math.floor((diff % 60_000) / 1000);
+  return [hours, minutes, seconds]
+    .map((n) => String(n).padStart(2, "0"))
+    .join(":");
+}
+
 interface UserProfileClientProps {
   playerDid: string;
   playerHandle: string;
   viewerDid: string | null;
+  viewerUnlimitedPulls: boolean;
+  nextPullUtcIso: string;
+  activeCollections: ProfileMysteryBoxCollection[];
   initialIsFollowing: boolean;
   heldCount: number;
   discoveredCount: number;
@@ -60,6 +94,9 @@ export function UserProfileClient({
   playerDid,
   playerHandle,
   viewerDid,
+  viewerUnlimitedPulls,
+  nextPullUtcIso,
+  activeCollections,
   initialIsFollowing,
   heldCount,
   discoveredCount,
@@ -92,12 +129,27 @@ export function UserProfileClient({
   });
   const [socialBusyDid, setSocialBusyDid] = useState<string | null>(null);
 
-  const [giveTarget, setGiveTarget] = useState<ThingCardItem | null>(null);
+  const [giveTarget, setGiveTarget] = useState<GiveableThingSummary | null>(
+    null
+  );
   const [favBusyTid, setFavBusyTid] = useState<string | null>(null);
   const [favError, setFavError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [copiedOffer, setCopiedOffer] = useState<string | null>(null);
   const [revokingTid, setRevokingTid] = useState<string | null>(null);
+
+  // Mystery Box Collection draw states
+  const [mysteryBoxes, setMysteryBoxes] =
+    useState<ProfileMysteryBoxCollection[]>(activeCollections);
+  const [claimingBoxTid, setClaimingBoxTid] = useState<string | null>(null);
+  const [boxErrors, setBoxErrors] = useState<Record<string, string>>({});
+  const [unboxedByCollection, setUnboxedByCollection] = useState<
+    Record<string, ClaimedCollectionThingView>
+  >({});
+
+  useEffect(() => {
+    setMysteryBoxes(activeCollections);
+  }, [activeCollections]);
 
   useEffect(() => {
     setFollowing(initialIsFollowing);
@@ -112,10 +164,89 @@ export function UserProfileClient({
   }, [followingList, followersList]);
 
   useEffect(() => {
-    if (!isSelf || outgoingEscrows.length === 0) return;
+    const needsClock =
+      (isSelf && outgoingEscrows.length > 0) || mysteryBoxes.length > 0;
+    if (!needsClock) return;
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [isSelf, outgoingEscrows.length]);
+  }, [isSelf, outgoingEscrows.length, mysteryBoxes.length]);
+
+  async function handleClaimMysteryBox(collectionTid: string) {
+    setClaimingBoxTid(collectionTid);
+    setBoxErrors((prev) => {
+      const copy = { ...prev };
+      delete copy[collectionTid];
+      return copy;
+    });
+
+    try {
+      const res = await fetch(
+        `/api/collections/${encodeURIComponent(collectionTid)}/claim`,
+        { method: "POST" }
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        alreadyClaimedToday?: boolean;
+        soldOut?: boolean;
+        thing?: ClaimedCollectionThingView & {
+          remainingCount: number;
+          unlimitedPulls?: boolean;
+        };
+      };
+
+      if (!res.ok || !data.thing) {
+        if (data.alreadyClaimedToday) {
+          setMysteryBoxes((prev) =>
+            prev.map((b) =>
+              b.collectionTid === collectionTid
+                ? { ...b, viewerHasClaimedToday: true }
+                : b
+            )
+          );
+        } else if (data.soldOut) {
+          // Depleted collections disappear immediately
+          setMysteryBoxes((prev) =>
+            prev.filter((b) => b.collectionTid !== collectionTid)
+          );
+        } else {
+          setBoxErrors((prev) => ({
+            ...prev,
+            [collectionTid]:
+              data.error ?? "Could not draw from this mystery box.",
+          }));
+        }
+        return;
+      }
+
+      const drawn = data.thing;
+      const isUnlim = Boolean(drawn.unlimitedPulls || viewerUnlimitedPulls);
+
+      setUnboxedByCollection((prev) => ({
+        ...prev,
+        [collectionTid]: drawn,
+      }));
+      setMysteryBoxes((prev) =>
+        prev.map((b) =>
+          b.collectionTid === collectionTid
+            ? {
+                ...b,
+                remainingCount: drawn.remainingCount,
+                viewerHasClaimedToday: !isUnlim,
+              }
+            : b
+        )
+      );
+      router.refresh();
+    } catch {
+      setBoxErrors((prev) => ({
+        ...prev,
+        [collectionTid]: "Network error reaching Give a Thing.",
+      }));
+    } finally {
+      setClaimingBoxTid(null);
+    }
+  }
 
   async function toggleFollow() {
     setFollowBusy(true);
@@ -338,6 +469,238 @@ export function UserProfileClient({
         >
           {favError}
         </p>
+      )}
+
+      {/* Creator Mystery Box Collections (Automatically disappears once remainingCount === 0) */}
+      {mysteryBoxes.some(
+        (b) => b.remainingCount > 0 || Boolean(unboxedByCollection[b.collectionTid])
+      ) && (
+        <section
+          aria-label={`@${playerHandle}'s Mystery Box Collections`}
+          className="rpg-panel p-5 sm:p-6 space-y-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#9e762a]/50 pb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[#ff4d6d]" aria-hidden="true" />
+              <h2 className="font-pixel text-xs sm:text-sm text-[#ffd15c]">
+                @{playerHandle.toUpperCase()}&apos;S MYSTERY BOXES
+              </h2>
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 rounded bg-[#160f24] px-2.5 py-1 text-xs text-[#cfc3e8] border border-[#4da6ff]/50">
+              <Clock className="h-3.5 w-3.5 text-[#8ec8ff]" aria-hidden="true" />
+              <span>Day resets in</span>
+              <span className="font-pixel text-[#fdf6e9]">
+                {formatUtcCountdown(nextPullUtcIso, nowMs)}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {mysteryBoxes
+              .filter(
+                (box) =>
+                  box.remainingCount > 0 ||
+                  Boolean(unboxedByCollection[box.collectionTid])
+              )
+              .map((box) => {
+                const unboxed = unboxedByCollection[box.collectionTid];
+                const isClaiming = claimingBoxTid === box.collectionTid;
+                const boxErr = boxErrors[box.collectionTid];
+
+                return (
+                  <article
+                    key={box.collectionTid}
+                    className="rpg-slot p-4 sm:p-5 border-[#a87bff]/65 space-y-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <h3 className="font-pixel text-sm sm:text-base text-[#fdf6e9]">
+                          {box.name}
+                        </h3>
+                        {box.description ? (
+                          <p className="text-xs sm:text-sm text-[#cfc3e8] max-w-2xl">
+                            {box.description}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <span className="rounded border border-[#ffd15c]/60 bg-[#251a3c] px-2.5 py-1 font-pixel text-[10px] text-[#ffd15c]">
+                        {box.remainingCount}{" "}
+                        {box.remainingCount === 1 ? "THING" : "THINGS"} LEFT
+                      </span>
+                    </div>
+
+                    {unboxed ? (
+                      <div className="grid gap-5 md:grid-cols-[auto_1fr] md:items-center pt-1">
+                        <div className="flex flex-col items-center">
+                          <div className="rpg-panel-subtle relative flex h-36 w-36 items-center justify-center p-3">
+                            <img
+                              src={unboxed.iconUrl}
+                              alt={unboxed.iconAlt}
+                              width={112}
+                              height={112}
+                              className="pixel-art h-28 w-28 object-contain"
+                            />
+                            <span className="absolute -top-2 -right-2 rounded bg-[#ff4d6d] px-2 py-0.5 font-pixel text-[9px] text-[#24040b]">
+                              NEW!
+                            </span>
+                          </div>
+                          <span className="mt-2 font-pixel text-[11px] text-[#ffd15c]">
+                            CATALOG #
+                            {String(unboxed.catalogNumber).padStart(4, "0")}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded bg-[#251a3c] px-2.5 py-0.5 text-xs text-[#8ec8ff] border border-[#4da6ff]/40">
+                              {unboxed.category}
+                            </span>
+                            <span className="rounded bg-[#251a3c] px-2.5 py-0.5 text-xs text-[#cfc3e8]">
+                              {unboxed.subcategory}
+                            </span>
+                          </div>
+
+                          <h4 className="font-pixel text-sm sm:text-base text-[#fdf6e9]">
+                            {unboxed.name}
+                          </h4>
+
+                          <p className="text-xs sm:text-sm leading-relaxed text-[#fdf6e9]/90">
+                            {unboxed.description}
+                          </p>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-[#251a3c]/85 px-3 py-2 text-xs border border-[#9e762a]/40">
+                            <span className="italic text-[#cfc3e8]">
+                              &ldquo;{unboxed.flavorText}&rdquo;
+                            </span>
+                            <span className="font-pixel text-[10px] text-[#ffd15c]">
+                              {unboxed.uselessTrait}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setGiveTarget(unboxed)}
+                              className="rpg-btn-red inline-flex items-center gap-2 px-3.5 py-2 font-pixel text-[11px]"
+                            >
+                              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                              Give to a Friend
+                            </button>
+
+                            <Link
+                              href={`/thing/${unboxed.thingTid}`}
+                              className="rpg-btn-blue inline-flex items-center gap-2 px-3.5 py-2 font-pixel text-[11px]"
+                            >
+                              <ScrollText
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                              View History
+                            </Link>
+
+                            {viewerUnlimitedPulls && box.remainingCount > 0 ? (
+                              <button
+                                type="button"
+                                disabled={isClaiming}
+                                onClick={() =>
+                                  void handleClaimMysteryBox(box.collectionTid)
+                                }
+                                className="rpg-btn-primary inline-flex items-center gap-2 px-3.5 py-2 font-pixel text-[11px]"
+                              >
+                                <Gift className="h-3.5 w-3.5" aria-hidden="true" />
+                                {isClaiming ? "Unwrapping…" : "Draw Another!"}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : box.viewerHasClaimedToday ? (
+                      <div className="flex flex-col sm:flex-row items-center gap-4 py-2 text-center sm:text-left">
+                        <div className="rpg-panel-subtle flex h-24 w-24 shrink-0 items-center justify-center p-2">
+                          <img
+                            src="/empty-box.svg"
+                            alt="16-bit open empty box"
+                            width={76}
+                            height={76}
+                            className="pixel-art h-19 w-19"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-pixel text-xs text-[#fdf6e9]">
+                            Today&apos;s Mystery Box Is Empty!
+                          </p>
+                          <p className="whitespace-pre-line text-xs sm:text-sm text-[#cfc3e8]">
+                            {
+                              "You've already gotten a thing from this collection today.\nCome back tomorrow for another thing!"
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2">
+                        <div className="flex items-center gap-4">
+                          <div className="rpg-panel-subtle flex h-24 w-24 shrink-0 items-center justify-center p-2">
+                            <img
+                              src="/icon.svg"
+                              alt="16-bit wrapped mystery box"
+                              width={76}
+                              height={76}
+                              className={`pixel-art h-19 w-19 ${
+                                isClaiming
+                                  ? "animate-parcel-wobble"
+                                  : "animate-float-gentle"
+                              }`}
+                            />
+                          </div>
+                          <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8] max-w-md">
+                            Draw 1 surprise custom thing per day from{" "}
+                            <strong>@{playerHandle}</strong>&apos;s{" "}
+                            <strong>{box.name}</strong> collection before the
+                            box runs out!
+                          </p>
+                        </div>
+
+                        {!viewerDid ? (
+                          <Link
+                            href={`/login?returnTo=/u/${encodeURIComponent(playerHandle)}`}
+                            className="rpg-btn-blue shrink-0 inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
+                          >
+                            LOGIN TO DRAW
+                          </Link>
+                        ) : isSelf && !viewerUnlimitedPulls ? (
+                          <span className="rounded border border-[#9e762a]/60 bg-[#251a3c] px-3 py-2 text-xs text-[#cfc3e8]">
+                            Share your profile so friends can draw from this box!
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isClaiming}
+                            onClick={() =>
+                              void handleClaimMysteryBox(box.collectionTid)
+                            }
+                            className="rpg-btn-red shrink-0 inline-flex items-center gap-2 px-5 py-3 font-pixel text-xs"
+                          >
+                            <Gift className="h-4 w-4" aria-hidden="true" />
+                            {isClaiming
+                              ? "Opening Box…"
+                              : "Get a Mystery Thing!"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {boxErr ? (
+                      <p role="alert" className="text-xs text-[#ff99ac]">
+                        {boxErr}
+                      </p>
+                    ) : null}
+                  </article>
+                );
+              })}
+          </div>
+        </section>
       )}
 
       {/* Featured Top 8 Things Showcase */}

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { nextTid, type ProvenanceHop, type StrongRef } from "@/lib/lexicons";
 import {
@@ -179,7 +179,8 @@ export async function executeDailyPull(
       .where(
         and(
           eq(schema.things.discovererDid, userDid),
-          eq(schema.things.pullUtcDate, pullUtcDate)
+          eq(schema.things.pullUtcDate, pullUtcDate),
+          isNull(schema.things.collectionId)
         )
       )
       .limit(1);
@@ -354,6 +355,14 @@ export async function executeDailyPull(
         pullSlot = Number(slotRows[0]?.maxSlot ?? 0) + 1;
       }
 
+      // Resolve official @giveathing.com creator DID for generated pulls
+      const [officialCreator] = await tx
+        .select({ did: schema.users.did })
+        .from(schema.users)
+        .where(sql`lower(${schema.users.handle}) = ${UNLIMITED_PULL_HANDLE}`)
+        .limit(1);
+      const generatedCreatorDid = officialCreator?.did ?? userDid;
+
       const insertedRows = await tx
         .insert(schema.things)
         .values({
@@ -370,6 +379,8 @@ export async function executeDailyPull(
           embedding: chosenEmbedding,
           iconUrl,
           spritePngBase64,
+          createdByDid: generatedCreatorDid,
+          collectionId: null,
           discovererDid: userDid,
           pullUtcDate,
           pullSlot,

@@ -47,6 +47,7 @@ export default async function ThingInspectorPage({
   }
 
   const isViewerOwner = session?.did === detail.currentOwner.did;
+  const isViewerCreator = session?.did === detail.creator.did;
 
   return (
     <div className="space-y-6">
@@ -110,8 +111,20 @@ export default async function ThingInspectorPage({
               </span>
             </div>
 
-            {/* Ownership Summary */}
-            <div className="grid gap-3 sm:grid-cols-2 pt-1">
+            {/* Creator & Ownership Summary */}
+            <div className="grid gap-3 sm:grid-cols-3 pt-1">
+              <div className="rpg-slot p-3 text-xs">
+                <span className="block font-pixel text-[10px] text-[#cfc3e8] mb-1">
+                  CREATED BY
+                </span>
+                <Link
+                  href={`/u/${encodeURIComponent(detail.creator.handle)}`}
+                  className="font-semibold text-sm text-[#c49bff] hover:underline"
+                >
+                  @{detail.creator.handle}
+                </Link>
+              </div>
+
               <div className="rpg-slot p-3 text-xs">
                 <span className="block font-pixel text-[10px] text-[#cfc3e8] mb-1">
                   ORIGINALLY DISCOVERED BY
@@ -137,7 +150,7 @@ export default async function ThingInspectorPage({
               </div>
             </div>
 
-            {/* Owner Controls (Give / Escrow Revoke) */}
+            {/* Owner & Creator Controls (Give / Escrow Revoke / Creator Destroy) */}
             <ThingInspectorActions
               thing={{
                 thingTid: detail.thingTid,
@@ -148,6 +161,7 @@ export default async function ThingInspectorPage({
               }}
               status={detail.status}
               isViewerOwner={isViewerOwner}
+              isViewerCreator={isViewerCreator}
               activeEscrow={detail.activeEscrow}
             />
           </div>

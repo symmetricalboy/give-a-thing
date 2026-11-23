@@ -48,11 +48,15 @@ export function buildBlueskyComposerIntentUrl(params: {
 }
 
 async function getSprite512BufferFromBase64(
-  sprite64Base64: string | null
+  spriteBase64: string | null
 ): Promise<Buffer | undefined> {
-  if (!sprite64Base64) return undefined;
-  const buf64 = Buffer.from(sprite64Base64, "base64");
-  return await sharp(buf64)
+  if (!spriteBase64) return undefined;
+  const buf = Buffer.from(spriteBase64, "base64");
+  const meta = await sharp(buf).metadata();
+  if (meta.width === 512 && meta.height === 512) {
+    return buf;
+  }
+  return await sharp(buf)
     .resize(512, 512, { kernel: sharp.kernel.nearest })
     .png({ compressionLevel: 9, palette: true, colors: 48 })
     .toBuffer();

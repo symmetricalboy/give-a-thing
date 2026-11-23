@@ -7,7 +7,9 @@ import {
   eq,
   ilike,
   inArray,
+  isNull,
   lt,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -38,6 +40,16 @@ export interface PublicUserBrief {
 
 export interface ProfileSocialUser extends PublicUserBrief {
   viewerFollows: boolean;
+}
+
+export interface ProfileMysteryBoxCollection {
+  collectionTid: string;
+  name: string;
+  description: string | null;
+  totalItems: number;
+  remainingCount: number;
+  viewerHasClaimedToday: boolean;
+  createdAtIso: string;
 }
 
 export interface DirectoryUserCard extends PublicUserBrief {
@@ -150,7 +162,9 @@ export async function getDailyPullStatus(
       .where(
         and(
           eq(schema.things.discovererDid, viewerDid),
-          eq(schema.things.pullUtcDate, pullUtcDate)
+          eq(schema.things.pullUtcDate, pullUtcDate),
+          isNull(schema.things.collectionId),
+          ne(schema.things.status, "unclaimed")
         )
       )
       .orderBy(desc(schema.things.createdAt))
@@ -234,7 +248,14 @@ export async function getFeedPage(params: {
     conditions.push(
       or(
         eq(schema.feedEvents.actorDid, params.viewerDid),
-        eq(schema.feedEvents.targetDid, params.viewerDid)
+        eq(schema.feedEvents.targetDid, params.viewerDid),
+        sql`EXISTS (
+          SELECT 1
+          FROM things t
+          WHERE t.thing_tid = ${schema.feedEvents.thingTid}
+            AND t.collection_id IS NOT NULL
+            AND t.created_by_did = ${params.viewerDid}
+        )`
       )
     );
   }
@@ -309,7 +330,7 @@ export async function getThingDetailWithLedger(thingTid: string) {
     .limit(1);
 
   const row = rows[0];
-  if (!row) return null;
+  if (!row || row.status === "unclaimed") return null;
 
   const [ledgerRows, openOfferRows] = await Promise.all([
     db
@@ -329,7 +350,10 @@ export async function getThingDetailWithLedger(thingTid: string) {
       .limit(1),
   ]);
 
+  const creatorDid = row.createdByDid ?? row.discovererDid;
+
   const dids = [
+    creatorDid,
     row.discovererDid,
     row.currentOwnerDid,
     ...ledgerRows.map((l) => l.toDid),
@@ -354,10 +378,12 @@ export async function getThingDetailWithLedger(thingTid: string) {
     pullUtcDate: row.pullUtcDate,
     status: row.status as "held" | "escrowed",
     transferCount: row.transferCount,
+    collectionId: row.collectionId ?? null,
     canonicalAtUri: row.canonicalAtUri,
     latestLedgerAtUri: row.latestLedgerAtUri,
     currentHoldingAtUri: row.currentHoldingAtUri,
     createdAtIso: row.createdAt.toISOString(),
+    creator: userMap.get(creatorDid) ?? fallbackBrief(creatorDid),
     discoverer:
       userMap.get(row.discovererDid) ?? fallbackBrief(row.discovererDid),
     currentOwner:
@@ -434,8 +460,11 @@ export async function searchDiscoveryCatalog(params: {
     )})`;
 
     const whereCond = params.category
-      ? eq(schema.things.category, params.category)
-      : undefined;
+      ? and(
+          ne(schema.things.status, "unclaimed"),
+          eq(schema.things.category, params.category)
+        )
+      : ne(schema.things.status, "unclaimed");
 
     const [rows, totalRes] = await Promise.all([
       db
@@ -464,20 +493,21 @@ export async function searchDiscoveryCatalog(params: {
     };
   }
 
-  const conditions = [];
+  const conditions = [ne(schema.things.status, "unclaimed")];
   if (params.category) {
     conditions.push(eq(schema.things.category, params.category));
   }
   if (q) {
     const pattern = `%${q}%`;
-    conditions.push(
-      or(
-        ilike(schema.things.name, pattern),
-        ilike(schema.things.description, pattern),
-        ilike(schema.things.subcategory, pattern),
-        ilike(schema.things.flavorText, pattern)
-      )
+    const searchMatch = or(
+      ilike(schema.things.name, pattern),
+      ilike(schema.things.description, pattern),
+      ilike(schema.things.subcategory, pattern),
+      ilike(schema.things.flavorText, pattern)
     );
+    if (searchMatch) {
+      conditions.push(searchMatch);
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -670,7 +700,12 @@ export async function searchDirectoryUsers(params: {
             value: count(),
           })
           .from(schema.things)
-          .where(inArray(schema.things.currentOwnerDid, playerDids))
+          .where(
+            and(
+              inArray(schema.things.currentOwnerDid, playerDids),
+              ne(schema.things.status, "unclaimed")
+            )
+          )
           .groupBy(schema.things.currentOwnerDid),
         db
           .select({
@@ -678,7 +713,12 @@ export async function searchDirectoryUsers(params: {
             value: count(),
           })
           .from(schema.things)
-          .where(inArray(schema.things.discovererDid, playerDids))
+          .where(
+            and(
+              inArray(schema.things.discovererDid, playerDids),
+              ne(schema.things.status, "unclaimed")
+            )
+          )
           .groupBy(schema.things.discovererDid),
       ]);
 
@@ -766,21 +806,32 @@ export async function getPlayerProfile(
   const player = userRows[0];
   if (!player) return null;
 
+  const pullUtcDate = getCurrentUtcDateString();
+  const nextPullUtcIso = getNextUtcMidnightIso();
+
   const [
     heldRows,
     favoriteRows,
     discoveredCountRes,
+    createdCountRes,
     givenCountRes,
     openEscrowRows,
     playerFollowingRows,
     playerFollowerRows,
     viewerFollowingRows,
+    viewerUserRows,
+    creatorCollectionRows,
     bskyProfile,
   ] = await Promise.all([
     db
       .select()
       .from(schema.things)
-      .where(eq(schema.things.currentOwnerDid, player.did))
+      .where(
+        and(
+          eq(schema.things.currentOwnerDid, player.did),
+          ne(schema.things.status, "unclaimed")
+        )
+      )
       .orderBy(desc(schema.things.createdAt)),
     db
       .select()
@@ -790,7 +841,16 @@ export async function getPlayerProfile(
     db
       .select({ value: count() })
       .from(schema.things)
-      .where(eq(schema.things.discovererDid, player.did)),
+      .where(
+        and(
+          eq(schema.things.discovererDid, player.did),
+          ne(schema.things.status, "unclaimed")
+        )
+      ),
+    db
+      .select({ value: count() })
+      .from(schema.things)
+      .where(eq(schema.things.createdByDid, player.did)),
     db
       .select({ value: count() })
       .from(schema.provenanceEntries)
@@ -821,8 +881,88 @@ export async function getPlayerProfile(
           .from(schema.follows)
           .where(eq(schema.follows.followerDid, viewerDid))
       : Promise.resolve([]),
+    viewerDid
+      ? db
+          .select({ did: schema.users.did, handle: schema.users.handle })
+          .from(schema.users)
+          .where(eq(schema.users.did, viewerDid))
+          .limit(1)
+      : Promise.resolve([]),
+    db
+      .select()
+      .from(schema.thingCollections)
+      .where(eq(schema.thingCollections.creatorDid, player.did))
+      .orderBy(desc(schema.thingCollections.createdAt)),
     fetchRichBlueskyProfile(player.did),
   ]);
+
+  const viewerUnlimitedPulls = viewerDid
+    ? isUnlimitedPullAccount({
+        did: viewerDid,
+        handle: viewerUserRows[0]?.handle ?? null,
+      })
+    : false;
+
+  // Resolve active (non-depleted) Mystery Box collections on this profile
+  let activeCollections: ProfileMysteryBoxCollection[] = [];
+  if (creatorCollectionRows.length > 0) {
+    const colTids = creatorCollectionRows.map((c) => c.collectionTid);
+    const [unclaimedCountRows, viewerClaimRows] = await Promise.all([
+      db
+        .select({
+          collectionId: schema.things.collectionId,
+          value: count(),
+        })
+        .from(schema.things)
+        .where(
+          and(
+            inArray(schema.things.collectionId, colTids),
+            eq(schema.things.status, "unclaimed")
+          )
+        )
+        .groupBy(schema.things.collectionId),
+      viewerDid && !viewerUnlimitedPulls
+        ? db
+            .select({
+              collectionTid: schema.collectionDailyClaims.collectionTid,
+            })
+            .from(schema.collectionDailyClaims)
+            .where(
+              and(
+                eq(schema.collectionDailyClaims.claimerDid, viewerDid),
+                eq(schema.collectionDailyClaims.pullUtcDate, pullUtcDate),
+                inArray(schema.collectionDailyClaims.collectionTid, colTids)
+              )
+            )
+        : Promise.resolve([]),
+    ]);
+
+    const remainingMap = new Map<string, number>();
+    for (const r of unclaimedCountRows) {
+      if (r.collectionId) {
+        remainingMap.set(r.collectionId, Number(r.value));
+      }
+    }
+    const viewerClaimedTodaySet = new Set(
+      viewerClaimRows.map((r) => r.collectionTid)
+    );
+
+    // Depleted collections (`remaining === 0`) automatically disappear from the profile
+    activeCollections = creatorCollectionRows
+      .map((c) => {
+        const remainingCount = remainingMap.get(c.collectionTid) ?? 0;
+        return {
+          collectionTid: c.collectionTid,
+          name: c.name,
+          description: c.description,
+          totalItems: c.totalItems,
+          remainingCount,
+          viewerHasClaimedToday: viewerClaimedTodaySet.has(c.collectionTid),
+          createdAtIso: c.createdAt.toISOString(),
+        };
+      })
+      .filter((c) => c.remainingCount > 0);
+  }
 
   const followingDids = playerFollowingRows.map((r) => r.subjectDid);
   const followerDids = playerFollowerRows.map((r) => r.followerDid);
@@ -885,12 +1025,15 @@ export async function getPlayerProfile(
     stats: {
       heldCount: heldRows.length,
       discoveredCount: Number(discoveredCountRes[0]?.value ?? 0),
-      createdCount: 0,
+      createdCount: Number(createdCountRes[0]?.value ?? 0),
       givenAwayCount: Number(givenCountRes[0]?.value ?? 0),
       followingCount: followingList.length,
       followersCount: followersList.length,
     },
     isFollowing: viewerFollowSet.has(player.did),
+    viewerUnlimitedPulls,
+    nextPullUtcIso,
+    activeCollections,
     followingList,
     followersList,
     topThings,
