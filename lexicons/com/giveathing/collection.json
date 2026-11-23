@@ -1,0 +1,73 @@
+{
+  "lexicon": 1,
+  "id": "com.giveathing.collection",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Metadata and item manifest for a creator Mystery Box collection on Give a Thing, stored in the creator's PDS.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "collectionId",
+          "name",
+          "createdBy",
+          "items",
+          "totalItems",
+          "createdAt"
+        ],
+        "properties": {
+          "collectionId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Unique TID of this collection (matches the record key)."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "maxGraphemes": 80,
+            "description": "Permanent title of the collection."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 280,
+            "maxGraphemes": 280,
+            "description": "Optional editable tagline or description of the collection."
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the creator who published this collection."
+          },
+          "items": {
+            "type": "array",
+            "maxLength": 500,
+            "items": {
+              "type": "ref",
+              "ref": "com.atproto.repo.strongRef"
+            },
+            "description": "StrongRefs (uri + cid) linking to every com.giveathing.thing record in this collection."
+          },
+          "totalItems": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total number of things currently in this collection."
+          },
+          "priceCents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Current pull price in USD cents (0 for free Mystery Boxes)."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

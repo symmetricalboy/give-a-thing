@@ -342,21 +342,19 @@ export function CollectionPageClient({
 
             {isCreator ? (
               <div className="flex flex-wrap items-center gap-2">
-                {box.remainingCount > 0 ? (
-                  <Link
-                    href={`/make?editPrice=${encodeURIComponent(box.collectionTid)}`}
-                    className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px] text-[#ffd15c]"
-                  >
-                    <Coins className="h-3.5 w-3.5" aria-hidden="true" />
-                    {isPaidBox ? "Change Price" : "Set Price"}
-                  </Link>
-                ) : null}
                 <Link
-                  href="/make"
+                  href={`/make?tab=collections&editPrice=${encodeURIComponent(box.collectionTid)}`}
+                  className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px] text-[#ffd15c]"
+                >
+                  <Coins className="h-3.5 w-3.5" aria-hidden="true" />
+                  {isPaidBox ? "Change Price" : "Set Price"}
+                </Link>
+                <Link
+                  href="/make?tab=collections"
                   className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px] text-[#8ec8ff]"
                 >
                   <Hammer className="h-3.5 w-3.5" aria-hidden="true" />
-                  Workshop
+                  Edit / Add Things
                 </Link>
               </div>
             ) : null}

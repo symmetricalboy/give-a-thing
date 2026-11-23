@@ -14,6 +14,7 @@ import { processInto16BitSprite } from "../src/lib/generator/pixel-art";
 import {
   AtmosphereDefineRecordSchema,
   buildAtmosphereDefineRecord,
+  CollectionRecordSchema,
   FavoriteRecordSchema,
   HoldingRecordSchema,
   LedgerRecordSchema,
@@ -201,13 +202,55 @@ describe("Give a Thing — Core Engine Verification", () => {
       maxLength: 64,
       description: expect.any(String),
     });
+    expect(thingLexiconJson.defs.main.record.properties.collection).toEqual({
+      type: "string",
+      format: "at-uri",
+      description: expect.any(String),
+    });
 
     const validCollectionThing = ThingRecordSchema.parse({
       ...validThing,
       collectionId: tid1,
+      collection: `at://did:plc:giveathingapp/${LEXICON_NSIDS.COLLECTION}/${tid1}`,
     });
     expect(validCollectionThing.collectionId).toBe(tid1);
+    expect(validCollectionThing.collection).toBe(
+      `at://did:plc:giveathingapp/com.giveathing.collection/${tid1}`
+    );
 
+    const collectionLexiconJson = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          process.cwd(),
+          "lexicons",
+          "com",
+          "giveathing",
+          "collection.json"
+        ),
+        "utf8"
+      )
+    );
+    expect(collectionLexiconJson.id).toBe("com.giveathing.collection");
+
+    const validCollectionRecord = CollectionRecordSchema.parse({
+      $type: LEXICON_NSIDS.COLLECTION,
+      collectionId: tid1,
+      name: "Roadside Attraction Relics",
+      description: "Souvenirs from exits nobody meant to take.",
+      createdBy: "did:plc:giveathingapp",
+      items: [
+        {
+          uri: `at://did:plc:giveathingapp/${LEXICON_NSIDS.THING}/${tid1}`,
+          cid: "bafkreitest",
+        },
+      ],
+      totalItems: 1,
+      priceCents: 0,
+      createdAt: "2026-11-22T00:01:00.000Z",
+    });
+    expect(validCollectionRecord.$type).toBe("com.giveathing.collection");
+
+    expect(USER_OAUTH_SCOPES).toContain(`repo:${LEXICON_NSIDS.COLLECTION}`);
     expect(USER_OAUTH_SCOPES).toContain(`repo:${LEXICON_NSIDS.FAVORITE}`);
 
     const validLedger = LedgerRecordSchema.parse({
@@ -264,7 +307,10 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(parsedAtmosphere.media).toBeUndefined();
     expect(parsedAtmosphere.requires?.length).toBe(1);
     expect(parsedAtmosphere.requires?.[0]?.nsid).toBe("app.bsky.actor.profile");
-    expect(parsedAtmosphere.uses?.length).toBe(9);
+    expect(parsedAtmosphere.uses?.length).toBe(10);
+    expect(
+      parsedAtmosphere.uses?.some((u) => u.nsid === "com.giveathing.collection")
+    ).toBe(true);
     expect(
       parsedAtmosphere.uses?.some((u) => u.nsid === "com.giveathing.ledger")
     ).toBe(true);
@@ -573,7 +619,7 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(otherSrc).toContain("https://bsky.app/profile/giveathing.com");
     expect(otherSrc).toContain("DANGER ZONE");
     expect(otherSrc).toContain("rpg-tabpanel-stack");
-    expect(USER_GIVEATHING_COLLECTIONS.length).toBe(7);
+    expect(USER_GIVEATHING_COLLECTIONS.length).toBe(8);
 
     const makePageSrc = fs.readFileSync(
       path.join(process.cwd(), "src", "app", "make", "page.tsx"),
@@ -976,5 +1022,42 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(queriesSrc).toContain("userLastActivityExpr");
     expect(queriesSrc).not.toContain("return b.heldCount - a.heldCount;");
     expect(queriesSrc).toContain("desc(schema.thingCollections.createdAt)");
+  });
+
+  it("supports post-creation collection tagline & item editing, adding new items, permanent collection titles, and two-section profile display", () => {
+    const makerSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "MakerStudioClient.tsx"),
+      "utf8"
+    );
+    expect(makerSrc).toContain("PERMANENT TITLE");
+    expect(makerSrc).toContain("Edit Tagline");
+    expect(makerSrc).toContain("Add Things");
+    expect(makerSrc).toContain("EDIT THING DETAILS");
+    expect(makerSrc).not.toContain("ALL CLAIMED · HIDDEN FROM PROFILE");
+
+    const serviceSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "lib", "maker", "collection-service.ts"),
+      "utf8"
+    );
+    expect(serviceSrc).toContain("syncCollectionRecordOnCreatorPds");
+    expect(serviceSrc).toContain("updateCreatorCollectionTagline");
+    expect(serviceSrc).toContain("addItemsToCreatorCollection");
+    expect(serviceSrc).toContain("updateCreatorCollectionThing");
+    expect(serviceSrc).toContain(
+      "Collection titles are permanent and cannot be changed after creation."
+    );
+
+    const profileClientSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "UserProfileClient.tsx"),
+      "utf8"
+    );
+    expect(profileClientSrc).toContain("PULLS AVAILABLE");
+    expect(profileClientSrc).toContain("ALL-CLAIMED COLLECTIONS");
+
+    const queriesSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "lib", "queries.ts"),
+      "utf8"
+    );
+    expect(queriesSrc).not.toContain(".filter((c) => c.remainingCount > 0)");
   });
 });

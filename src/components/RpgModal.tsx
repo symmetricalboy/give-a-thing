@@ -7,16 +7,23 @@ interface RpgModalProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  wide?: boolean;
   children: React.ReactNode;
 }
 
 /**
  * Accessible 16-Bit RPG Dialog built on the native HTML `<dialog>` element:
  * - Opened via `showModal()` for top-layer focus containment & Esc / back-gesture dismissal
- * - Uses declarative `closedby="any"` with a coordinate-checked Safari fallback
+ * - Uses declarative `closedby="any"` with a press-and-release coordinate Safari fallback
  * - Resets `dialog.returnValue = ''` on close
  */
-export function RpgModal({ open, onClose, title, children }: RpgModalProps) {
+export function RpgModal({
+  open,
+  onClose,
+  title,
+  wide = false,
+  children,
+}: RpgModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -45,21 +52,30 @@ export function RpgModal({ open, onClose, title, children }: RpgModalProps) {
     // Fallback for browsers without native `<dialog closedby="any">` support (e.g. Safari)
     let cleanupFallback: (() => void) | undefined;
     if (!("closedBy" in HTMLDialogElement.prototype)) {
-      const handleBackdropClick = (event: MouseEvent) => {
-        if (event.target !== dialog) return;
+      const isOutside = (event: PointerEvent) => {
         const rect = dialog.getBoundingClientRect();
-        const isInside =
-          rect.top <= event.clientY &&
-          event.clientY <= rect.top + rect.height &&
-          rect.left <= event.clientX &&
-          event.clientX <= rect.left + rect.width;
-        if (!isInside) {
+        return (
+          event.clientX < rect.left ||
+          event.clientX > rect.right ||
+          event.clientY < rect.top ||
+          event.clientY > rect.bottom
+        );
+      };
+      let pressedOutside = false;
+      const onPointerDown = (event: PointerEvent) => {
+        pressedOutside = isOutside(event);
+      };
+      const onPointerUp = (event: PointerEvent) => {
+        if (pressedOutside && isOutside(event)) {
           dialog.close();
         }
       };
-      dialog.addEventListener("click", handleBackdropClick);
-      cleanupFallback = () =>
-        dialog.removeEventListener("click", handleBackdropClick);
+      dialog.addEventListener("pointerdown", onPointerDown);
+      dialog.addEventListener("pointerup", onPointerUp);
+      cleanupFallback = () => {
+        dialog.removeEventListener("pointerdown", onPointerDown);
+        dialog.removeEventListener("pointerup", onPointerUp);
+      };
     }
 
     return () => {
@@ -72,9 +88,10 @@ export function RpgModal({ open, onClose, title, children }: RpgModalProps) {
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
+      className={wide ? "rpg-dialog-wide" : undefined}
       {...({ closedby: "any" } as Record<string, string>)}
     >
-      <div className="rpg-panel p-5 sm:p-6">
+      <div className="rpg-panel max-h-[88dvh] overflow-y-auto p-5 sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3 border-b-2 border-[#8c6826]/60 pb-3">
           <h2
             id={titleId}

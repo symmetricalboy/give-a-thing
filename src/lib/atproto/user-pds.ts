@@ -1,5 +1,5 @@
 import { Agent } from "@atproto/api";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getAppPdsAgent } from "./app-pds";
 import { getOAuthClient } from "./oauth";
@@ -546,6 +546,63 @@ export async function flushPendingPdsSyncsForUser(did: string): Promise<void> {
         await agent.com.atproto.repo.deleteRecord({
           repo: did,
           collection: LEXICON_NSIDS.FAVORITE,
+          rkey: job.thingTid,
+        });
+      } else if (job.action === "put_collection" && job.thingTid) {
+        const [col] = await db
+          .select()
+          .from(schema.thingCollections)
+          .where(eq(schema.thingCollections.collectionTid, job.thingTid))
+          .limit(1);
+
+        if (col && col.creatorDid === did) {
+          const colItems = await db
+            .select({
+              thingTid: schema.things.thingTid,
+              canonicalAtUri: schema.things.canonicalAtUri,
+              canonicalAtCid: schema.things.canonicalAtCid,
+            })
+            .from(schema.things)
+            .where(eq(schema.things.collectionId, col.collectionTid))
+            .orderBy(asc(schema.things.catalogNumber));
+
+          const itemRefs: StrongRef[] = colItems.map((it) => ({
+            uri:
+              it.canonicalAtUri ??
+              `at://${did}/${LEXICON_NSIDS.THING}/${it.thingTid}`,
+            cid: it.canonicalAtCid ?? `bafkrei${it.thingTid}`,
+          }));
+
+          const colPut = await agent.com.atproto.repo.putRecord({
+            repo: did,
+            collection: LEXICON_NSIDS.COLLECTION,
+            rkey: col.collectionTid,
+            record: {
+              $type: LEXICON_NSIDS.COLLECTION,
+              collectionId: col.collectionTid,
+              name: col.name,
+              ...(col.description ? { description: col.description } : {}),
+              createdBy: did,
+              items: itemRefs,
+              totalItems: colItems.length,
+              priceCents: col.priceCents,
+              createdAt: col.createdAt.toISOString(),
+              updatedAt: col.updatedAt.toISOString(),
+            },
+          });
+
+          await db
+            .update(schema.thingCollections)
+            .set({
+              canonicalAtUri: colPut.data.uri,
+              canonicalAtCid: colPut.data.cid,
+            })
+            .where(eq(schema.thingCollections.collectionTid, col.collectionTid));
+        }
+      } else if (job.action === "delete_collection" && job.thingTid) {
+        await agent.com.atproto.repo.deleteRecord({
+          repo: did,
+          collection: LEXICON_NSIDS.COLLECTION,
           rkey: job.thingTid,
         });
       }

@@ -14,6 +14,7 @@ import {
   Gift,
   Hammer,
   Loader2,
+  PackageOpen,
   RotateCcw,
   ScrollText,
   Search,
@@ -333,7 +334,11 @@ export function UserProfileClient({
       if (!res.ok || !data.checkoutUrl) {
         if (data.soldOut) {
           setMysteryBoxes((prev) =>
-            prev.filter((b) => b.collectionTid !== collectionTid)
+            prev.map((b) =>
+              b.collectionTid === collectionTid
+                ? { ...b, remainingCount: 0 }
+                : b
+            )
           );
         } else {
           setBoxErrors((prev) => ({
@@ -390,9 +395,12 @@ export function UserProfileClient({
             )
           );
         } else if (data.soldOut) {
-          // Depleted collections disappear immediately
           setMysteryBoxes((prev) =>
-            prev.filter((b) => b.collectionTid !== collectionTid)
+            prev.map((b) =>
+              b.collectionTid === collectionTid
+                ? { ...b, remainingCount: 0 }
+                : b
+            )
           );
         } else {
           setBoxErrors((prev) => ({
@@ -676,20 +684,23 @@ export function UserProfileClient({
         </section>
       )}
 
-      {/* Creator Mystery Box Collections (Automatically disappears once remainingCount === 0) */}
+      {/* Section 1: Collections With Pulls Available */}
       {mysteryBoxes.some(
         (b) => b.remainingCount > 0 || Boolean(unboxedByCollection[b.collectionTid])
       ) && (
         <section
-          aria-label={`@${playerHandle}'s Mystery Box Collections`}
+          aria-label={`@${playerHandle}'s Mystery Box Collections With Pulls Available`}
           className="rpg-panel p-5 sm:p-6 space-y-5"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#9e762a]/50 pb-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Sparkles className="h-4 w-4 text-[#ff4d6d]" aria-hidden="true" />
               <h2 className="font-pixel text-xs sm:text-sm text-[#ffd15c]">
                 @{playerHandle.toUpperCase()}&apos;S MYSTERY BOXES
               </h2>
+              <span className="rounded bg-[#4be3a0]/20 px-2 py-0.5 font-pixel text-[9px] text-[#4be3a0]">
+                PULLS AVAILABLE
+              </span>
             </div>
 
             {hasFreeMysteryBoxWithTimer ? (
@@ -948,6 +959,16 @@ export function UserProfileClient({
                               {isPaidBox ? "buy!" : "draw!"}
                             </span>
                             <Link
+                              href="/make?tab=collections"
+                              className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 font-pixel text-[10px] text-[#8ec8ff]"
+                            >
+                              <Hammer
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                              Edit / Add Things
+                            </Link>
+                            <Link
                               href={`/make?tab=collections&editPrice=${encodeURIComponent(box.collectionTid)}`}
                               className="rpg-btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-[10px]"
                             >
@@ -1004,6 +1025,119 @@ export function UserProfileClient({
                         {boxErr}
                       </p>
                     ) : null}
+                  </article>
+                );
+              })}
+          </div>
+        </section>
+      )}
+
+      {/* Section 2: All-Claimed Collections */}
+      {mysteryBoxes.some(
+        (b) => b.remainingCount === 0 && !unboxedByCollection[b.collectionTid]
+      ) && (
+        <section
+          aria-label={`@${playerHandle}'s All-Claimed Collections`}
+          className="rpg-panel-subtle p-5 sm:p-6 space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#9e762a]/45 pb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <PackageOpen
+                className="h-4 w-4 text-[#ffd15c]"
+                aria-hidden="true"
+              />
+              <h2 className="font-pixel text-xs sm:text-sm text-[#ffd15c]">
+                @{playerHandle.toUpperCase()}&apos;S ALL-CLAIMED COLLECTIONS
+              </h2>
+              <span className="rounded bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff99ac]">
+                ALL CLAIMED
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {mysteryBoxes
+              .filter(
+                (box) =>
+                  box.remainingCount === 0 &&
+                  !unboxedByCollection[box.collectionTid]
+              )
+              .map((box) => {
+                const isPaidBox = box.priceCents > 0;
+                const formattedPrice = formatUsdCents(box.priceCents);
+                const previews = box.previewIcons ?? [];
+
+                return (
+                  <article
+                    key={box.collectionTid}
+                    className="rpg-slot p-4 sm:p-5 flex flex-col justify-between gap-3.5 border-[#9e762a]/60"
+                  >
+                    <div className="space-y-2.5 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="rounded bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff99ac]">
+                          ALL CLAIMED &bull; {box.totalItems}{" "}
+                          {box.totalItems === 1 ? "THING" : "THINGS"}
+                        </span>
+                        <span className="rounded bg-[#251a3c] px-2 py-0.5 font-pixel text-[9px] text-[#cfc3e8]">
+                          {isPaidBox ? formattedPrice : "FREE"}
+                        </span>
+                      </div>
+
+                      <h3 className="font-pixel text-xs sm:text-sm text-[#fdf6e9] break-words">
+                        <Link
+                          href={`/collection/${encodeURIComponent(box.collectionTid)}`}
+                          className="hover:text-[#ffd15c] hover:underline"
+                        >
+                          {box.name}
+                        </Link>
+                      </h3>
+
+                      {box.description ? (
+                        <p className="text-xs text-[#cfc3e8] line-clamp-2">
+                          {box.description}
+                        </p>
+                      ) : null}
+
+                      {previews.length > 0 ? (
+                        <div className="flex items-center gap-2 pt-0.5">
+                          {previews.map((p) => (
+                            <Link
+                              key={p.thingTid}
+                              href={`/thing/${encodeURIComponent(p.thingTid)}`}
+                              title={p.name}
+                              className="rpg-panel-subtle flex h-11 w-11 shrink-0 items-center justify-center p-1 transition-colors hover:border-[#ffd15c]"
+                            >
+                              <img
+                                src={p.iconUrl}
+                                alt={p.name}
+                                className="pixel-art h-full w-full object-contain"
+                              />
+                            </Link>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#9e762a]/35 pt-3">
+                      <Link
+                        href={`/collection/${encodeURIComponent(box.collectionTid)}`}
+                        className="rpg-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px]"
+                      >
+                        <PackageOpen className="h-3 w-3" aria-hidden="true" />
+                        View Collection
+                        <span className="sr-only">: {box.name}</span>
+                      </Link>
+
+                      {isSelf ? (
+                        <Link
+                          href="/make?tab=collections"
+                          className="rpg-btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1.5 font-pixel text-[10px] text-[#8ec8ff]"
+                        >
+                          <Hammer className="h-3 w-3" aria-hidden="true" />
+                          Edit / Add Things
+                        </Link>
+                      ) : null}
+                    </div>
                   </article>
                 );
               })}

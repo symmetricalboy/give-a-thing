@@ -343,6 +343,10 @@ dialog {
   margin: auto;
 }
 
+dialog.rpg-dialog-wide {
+  max-inline-size: min(94dvw, 46rem);
+}
+
 dialog[open] {
   display: block;
 }

@@ -12,6 +12,7 @@ import {
   Hammer,
   ImagePlus,
   Loader2,
+  Lock,
   PackageOpen,
   Plus,
   Sparkles,
@@ -917,6 +918,515 @@ export function MakerStudioClient({
     }
   };
 
+  // --- Edit Collection Tagline (Title is Permanent) ---
+  const [editingTaglineCollection, setEditingTaglineCollection] =
+    useState<CreatorStudioCollectionSummary | null>(null);
+  const [editTaglineValue, setEditTaglineValue] = useState("");
+  const [savingTagline, setSavingTagline] = useState(false);
+  const [editTaglineError, setEditTaglineError] = useState<string | null>(null);
+
+  const openEditTaglineModal = (col: CreatorStudioCollectionSummary) => {
+    setEditTaglineError(null);
+    setEditTaglineValue(col.description ?? "");
+    setEditingTaglineCollection(col);
+  };
+
+  const handleSaveEditedTagline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTaglineCollection) return;
+    setEditTaglineError(null);
+    setSavingTagline(true);
+    try {
+      const res = await fetch(
+        `/api/maker/collections/${encodeURIComponent(editingTaglineCollection.collectionTid)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            description: editTaglineValue.trim(),
+          }),
+        }
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        collections?: CreatorStudioCollectionSummary[];
+      };
+      if (!res.ok || !data.ok) {
+        setEditTaglineError(
+          data.error ?? "Could not update collection tagline."
+        );
+        return;
+      }
+      if (data.collections) {
+        setCollections(data.collections);
+      }
+      setStatusMessage(
+        `Updated tagline for "${editingTaglineCollection.name}"!`
+      );
+      setEditingTaglineCollection(null);
+    } catch {
+      setEditTaglineError("Network error updating collection tagline.");
+    } finally {
+      setSavingTagline(false);
+    }
+  };
+
+  // --- Edit Existing Published Item Details ---
+  const editItemFileRef = useRef<HTMLInputElement>(null);
+  const [editingPublishedItem, setEditingPublishedItem] = useState<{
+    collectionName: string;
+    item: CreatorStudioCollectionSummary["items"][number];
+  } | null>(null);
+  const [editItemName, setEditItemName] = useState("");
+  const [editItemSubcategory, setEditItemSubcategory] = useState("");
+  const [editItemDescription, setEditItemDescription] = useState("");
+  const [editItemFlavorText, setEditItemFlavorText] = useState("");
+  const [editItemUselessTrait, setEditItemUselessTrait] = useState("");
+  const [editItemIconAlt, setEditItemIconAlt] = useState("");
+  const [editItemSpriteDataUrl, setEditItemSpriteDataUrl] = useState("");
+  const [generatingEditSprite, setGeneratingEditSprite] = useState(false);
+  const [savingItemEdit, setSavingItemEdit] = useState(false);
+  const [editItemError, setEditItemError] = useState<string | null>(null);
+
+  const openEditPublishedItemModal = (
+    collectionNameStr: string,
+    item: CreatorStudioCollectionSummary["items"][number]
+  ) => {
+    setEditItemError(null);
+    setEditItemName(item.name);
+    setEditItemSubcategory(item.subcategory);
+    setEditItemDescription(item.description);
+    setEditItemFlavorText(item.flavorText);
+    setEditItemUselessTrait(item.uselessTrait);
+    setEditItemIconAlt(item.iconAlt);
+    setEditItemSpriteDataUrl("");
+    if (editItemFileRef.current) editItemFileRef.current.value = "";
+    setEditingPublishedItem({ collectionName: collectionNameStr, item });
+  };
+
+  const handleEditItemPngUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditItemError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "image/png") {
+      setEditItemError(
+        "Only PNG files (.png) are accepted. Please upload a 512×512px PNG."
+      );
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 1_000_000) {
+      setEditItemError("PNG file must be 1 MB or smaller.");
+      e.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!dataUrl.startsWith("data:image/png;base64,")) {
+        setEditItemError("Could not read PNG file.");
+        return;
+      }
+      const img = new window.Image();
+      img.onload = () => {
+        if (img.naturalWidth !== 512 || img.naturalHeight !== 512) {
+          setEditItemError(
+            `Uploaded PNG must be strictly 512×512px (your image is ${img.naturalWidth}×${img.naturalHeight}px).`
+          );
+          if (editItemFileRef.current) editItemFileRef.current.value = "";
+          return;
+        }
+        setEditItemSpriteDataUrl(dataUrl);
+      };
+      img.onerror = () => setEditItemError("Invalid PNG image file.");
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleGenerateEditItemSprite = async () => {
+    if (!editingPublishedItem) return;
+    setEditItemError(null);
+    if (editItemName.trim().length < 2 || editItemSubcategory.trim().length < 2) {
+      setEditItemError("Fill in Name and Subcategory before generating an icon.");
+      return;
+    }
+    if (
+      editItemDescription.trim().length < 10 ||
+      editItemFlavorText.trim().length < 3
+    ) {
+      setEditItemError(
+        "Fill in Description (10+ chars) and Flavor Quote before generating an icon."
+      );
+      return;
+    }
+    setGeneratingEditSprite(true);
+    try {
+      const res = await fetch("/api/maker/generate-sprite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editItemName.trim(),
+          category: editingPublishedItem.collectionName,
+          subcategory: editItemSubcategory.trim(),
+          description: editItemDescription.trim(),
+          flavorText: editItemFlavorText.trim(),
+          uselessTrait: editItemUselessTrait.trim() || undefined,
+        }),
+      });
+      const data = (await res.json()) as {
+        spriteDataUrl?: string;
+        suggestedIconAlt?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.spriteDataUrl) {
+        setEditItemError(
+          data.error ?? "Could not generate an icon right now. Please try again!"
+        );
+        return;
+      }
+      setEditItemSpriteDataUrl(data.spriteDataUrl);
+      if (data.suggestedIconAlt) {
+        setEditItemIconAlt(data.suggestedIconAlt);
+      }
+    } catch {
+      setEditItemError("Network error while generating sprite.");
+    } finally {
+      setGeneratingEditSprite(false);
+    }
+  };
+
+  const handleSaveEditedItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPublishedItem) return;
+    setEditItemError(null);
+    setSavingItemEdit(true);
+
+    const cleanFlavor = editItemFlavorText
+      .trim()
+      .replace(/^["“”']+/, "")
+      .replace(/["“”']+$/, "")
+      .trim();
+
+    try {
+      const res = await fetch(
+        `/api/maker/things/${encodeURIComponent(editingPublishedItem.item.thingTid)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: editItemName.trim(),
+            subcategory: editItemSubcategory.trim(),
+            description: editItemDescription.trim(),
+            flavorText: cleanFlavor,
+            uselessTrait: editItemUselessTrait.trim(),
+            iconAlt: editItemIconAlt.trim(),
+            ...(editItemSpriteDataUrl
+              ? { spriteDataUrl: editItemSpriteDataUrl }
+              : {}),
+          }),
+        }
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        collections?: CreatorStudioCollectionSummary[];
+      };
+      if (!res.ok || !data.ok) {
+        setEditItemError(
+          data.error ?? "Could not save changes to this thing."
+        );
+        return;
+      }
+      if (data.collections) {
+        setCollections(data.collections);
+      }
+      setStatusMessage(`Saved updated details for "${editItemName.trim()}"!`);
+      setEditingPublishedItem(null);
+    } catch {
+      setEditItemError("Network error saving thing updates.");
+    } finally {
+      setSavingItemEdit(false);
+    }
+  };
+
+  // --- Add New Things to an Existing Collection ---
+  const addItemFileRef = useRef<HTMLInputElement>(null);
+  const [addingToCollection, setAddingToCollection] =
+    useState<CreatorStudioCollectionSummary | null>(null);
+  const [addStagedItems, setAddStagedItems] = useState<DraftThingItem[]>([]);
+  const [addName, setAddName] = useState("");
+  const [addSubcategory, setAddSubcategory] = useState("");
+  const [addDescription, setAddDescription] = useState("");
+  const [addFlavorText, setAddFlavorText] = useState("");
+  const [addUselessTrait, setAddUselessTrait] = useState("");
+  const [addIconAlt, setAddIconAlt] = useState("");
+  const [addSpriteDataUrl, setAddSpriteDataUrl] = useState("");
+  const [generatingAddSprite, setGeneratingAddSprite] = useState(false);
+  const [submittingAddItems, setSubmittingAddItems] = useState(false);
+  const [addItemsError, setAddItemsError] = useState<string | null>(null);
+
+  const resetAddItemDraftFields = () => {
+    setAddName("");
+    setAddSubcategory("");
+    setAddDescription("");
+    setAddFlavorText("");
+    setAddUselessTrait("");
+    setAddIconAlt("");
+    setAddSpriteDataUrl("");
+    if (addItemFileRef.current) addItemFileRef.current.value = "";
+  };
+
+  const openAddItemsModal = (col: CreatorStudioCollectionSummary) => {
+    setAddItemsError(null);
+    setAddStagedItems([]);
+    resetAddItemDraftFields();
+    setAddingToCollection(col);
+  };
+
+  const handleAddItemPngUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAddItemsError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "image/png") {
+      setAddItemsError(
+        "Only PNG files (.png) are accepted. Please upload a 512×512px PNG."
+      );
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 1_000_000) {
+      setAddItemsError("PNG file must be 1 MB or smaller.");
+      e.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!dataUrl.startsWith("data:image/png;base64,")) {
+        setAddItemsError("Could not read PNG file.");
+        return;
+      }
+      const img = new window.Image();
+      img.onload = () => {
+        if (img.naturalWidth !== 512 || img.naturalHeight !== 512) {
+          setAddItemsError(
+            `Uploaded PNG must be strictly 512×512px (your image is ${img.naturalWidth}×${img.naturalHeight}px).`
+          );
+          if (addItemFileRef.current) addItemFileRef.current.value = "";
+          return;
+        }
+        setAddSpriteDataUrl(dataUrl);
+      };
+      img.onerror = () => setAddItemsError("Invalid PNG image file.");
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleGenerateAddItemSprite = async () => {
+    if (!addingToCollection) return;
+    setAddItemsError(null);
+    if (addName.trim().length < 2 || addSubcategory.trim().length < 2) {
+      setAddItemsError("Fill in Name and Subcategory before generating an icon.");
+      return;
+    }
+    if (addDescription.trim().length < 10 || addFlavorText.trim().length < 3) {
+      setAddItemsError(
+        "Fill in Description (10+ chars) and Flavor Quote before generating an icon."
+      );
+      return;
+    }
+    setGeneratingAddSprite(true);
+    try {
+      const res = await fetch("/api/maker/generate-sprite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: addName.trim(),
+          category: addingToCollection.name,
+          subcategory: addSubcategory.trim(),
+          description: addDescription.trim(),
+          flavorText: addFlavorText.trim(),
+          uselessTrait: addUselessTrait.trim() || undefined,
+        }),
+      });
+      const data = (await res.json()) as {
+        spriteDataUrl?: string;
+        suggestedIconAlt?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.spriteDataUrl) {
+        setAddItemsError(
+          data.error ?? "Could not generate an icon right now. Please try again!"
+        );
+        return;
+      }
+      setAddSpriteDataUrl(data.spriteDataUrl);
+      if (!addIconAlt.trim() && data.suggestedIconAlt) {
+        setAddIconAlt(data.suggestedIconAlt);
+      }
+    } catch {
+      setAddItemsError("Network error while generating sprite.");
+    } finally {
+      setGeneratingAddSprite(false);
+    }
+  };
+
+  const buildValidatedAddDraftItem = (): DraftThingItem | null => {
+    if (!addingToCollection) return null;
+    if (addName.trim().length < 2) {
+      setAddItemsError("Give this thing a name (2–120 characters).");
+      return null;
+    }
+    const fp = clientCanonicalFingerprint(addName.trim());
+    if (!fp) {
+      setAddItemsError("Give this thing a descriptive, unique name.");
+      return null;
+    }
+    const existingColConflict = addingToCollection.items.find(
+      (i) => clientCanonicalFingerprint(i.name) === fp
+    );
+    if (existingColConflict) {
+      setAddItemsError(
+        `"${addName.trim()}" is too similar in name to "${existingColConflict.name}" already in this collection.`
+      );
+      return null;
+    }
+    const stagedConflict = addStagedItems.find(
+      (i) => clientCanonicalFingerprint(i.name) === fp
+    );
+    if (stagedConflict) {
+      setAddItemsError(
+        `"${addName.trim()}" is already staged below ("${stagedConflict.name}").`
+      );
+      return null;
+    }
+    if (addSubcategory.trim().length < 2) {
+      setAddItemsError("Enter a subcategory (2–120 characters).");
+      return null;
+    }
+    if (addDescription.trim().length < 10) {
+      setAddItemsError("Enter a description (at least 10 characters).");
+      return null;
+    }
+    const cleanFlavor = addFlavorText
+      .trim()
+      .replace(/^["“”']+/, "")
+      .replace(/["“”']+$/, "")
+      .trim();
+    if (cleanFlavor.length < 3) {
+      setAddItemsError("Enter a flavor quote (at least 3 characters).");
+      return null;
+    }
+    if (addUselessTrait.trim().length < 2) {
+      setAddItemsError("Enter a pointless trait (e.g., +0 Ergonomics).");
+      return null;
+    }
+    if (!addSpriteDataUrl.startsWith("data:image/png;base64,")) {
+      setAddItemsError(
+        "Upload a 512×512px PNG or click Generate in Our Standard Style."
+      );
+      return null;
+    }
+    if (addIconAlt.trim().length < 5) {
+      setAddItemsError("Enter sprite alt text (at least 5 characters).");
+      return null;
+    }
+
+    return {
+      localId: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: addName.trim(),
+      subcategory: addSubcategory.trim(),
+      description: addDescription.trim(),
+      flavorText: cleanFlavor,
+      uselessTrait: addUselessTrait.trim(),
+      iconAlt: addIconAlt.trim(),
+      spriteDataUrl: addSpriteDataUrl,
+      artworkSource: "upload",
+    };
+  };
+
+  const handleStageAnotherAddItem = () => {
+    setAddItemsError(null);
+    const built = buildValidatedAddDraftItem();
+    if (!built) return;
+    setAddStagedItems((prev) => [...prev, built]);
+    resetAddItemDraftFields();
+  };
+
+  const handleSubmitAddedItems = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addingToCollection) return;
+    setAddItemsError(null);
+
+    let itemsToSubmit = [...addStagedItems];
+    // If the user filled out the form directly without clicking "Stage Another", include it automatically!
+    const hasPartiallyFilledForm = Boolean(
+      addName.trim() ||
+        addSubcategory.trim() ||
+        addDescription.trim() ||
+        addFlavorText.trim() ||
+        addUselessTrait.trim() ||
+        addSpriteDataUrl
+    );
+    if (hasPartiallyFilledForm || itemsToSubmit.length === 0) {
+      const built = buildValidatedAddDraftItem();
+      if (!built) return;
+      itemsToSubmit = [...itemsToSubmit, built];
+    }
+
+    setSubmittingAddItems(true);
+    try {
+      const res = await fetch(
+        `/api/maker/collections/${encodeURIComponent(addingToCollection.collectionTid)}/items`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: itemsToSubmit.map((it) => ({
+              name: it.name,
+              subcategory: it.subcategory,
+              description: it.description,
+              flavorText: it.flavorText,
+              uselessTrait: it.uselessTrait,
+              iconAlt: it.iconAlt,
+              spriteDataUrl: it.spriteDataUrl,
+            })),
+          }),
+        }
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        addedCount?: number;
+        error?: string;
+        collections?: CreatorStudioCollectionSummary[];
+      };
+      if (!res.ok || !data.ok) {
+        setAddItemsError(
+          data.error ?? "Could not add items to this collection."
+        );
+        return;
+      }
+      if (data.collections) {
+        setCollections(data.collections);
+      }
+      setStatusMessage(
+        `Added ${data.addedCount ?? itemsToSubmit.length} new ${
+          (data.addedCount ?? itemsToSubmit.length) === 1 ? "thing" : "things"
+        } to "${addingToCollection.name}"!`
+      );
+      setAddingToCollection(null);
+      setAddStagedItems([]);
+      resetAddItemDraftFields();
+    } catch {
+      setAddItemsError("Network error adding items to collection.");
+    } finally {
+      setSubmittingAddItems(false);
+    }
+  };
+
   const activeStepMeta = WIZARD_STEPS.find((s) => s.step === activeStep)!;
   const itemOrdinal = editingLocalId
     ? draftItems.findIndex((i) => i.localId === editingLocalId) + 1
@@ -1312,7 +1822,9 @@ export function MakerStudioClient({
                   className="text-xs text-[#cfc3e8]"
                 >
                   2–100 characters. Shown as the Mystery Box title on your profile and
-                  on every item card in this set.
+                  on every item card in this set. Collection titles are permanent once
+                  published—you can still edit the tagline, edit item details, or add
+                  new things anytime!
                 </p>
                 <input
                   id={`${baseId}-collection-name`}
@@ -2185,11 +2697,11 @@ export function MakerStudioClient({
                       )}
                       {col.unclaimedCount > 0 ? (
                         <span className="rounded border border-[#4be3a0]/60 bg-[#160f24] px-2.5 py-0.5 font-pixel text-[9px] text-[#4be3a0]">
-                          LIVE ON PROFILE · {col.unclaimedCount} LEFT
+                          PULLS AVAILABLE · {col.unclaimedCount} LEFT
                         </span>
                       ) : (
-                        <span className="rounded border border-[#9e762a]/60 bg-[#160f24] px-2.5 py-0.5 font-pixel text-[9px] text-[#cfc3e8]">
-                          ALL CLAIMED · HIDDEN FROM PROFILE
+                        <span className="rounded border border-[#ff4d6d]/60 bg-[#160f24] px-2.5 py-0.5 font-pixel text-[9px] text-[#ff99ac]">
+                          ALL CLAIMED · ON PROFILE CLAIMED LIST
                         </span>
                       )}
                     </div>
@@ -2197,13 +2709,33 @@ export function MakerStudioClient({
                       <p className="text-xs sm:text-sm text-[#cfc3e8]">
                         {col.description}
                       </p>
-                    ) : null}
+                    ) : (
+                      <p className="text-xs italic text-[#cfc3e8]/65">
+                        No collection tagline set yet.
+                      </p>
+                    )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="text-xs text-[#cfc3e8]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-[#cfc3e8] mr-1">
                       {col.claimedCount} claimed · {col.unclaimedCount} in Mystery Box
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => openEditTaglineModal(col)}
+                      className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px] text-[#8ec8ff]"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
+                      Edit Tagline
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAddItemsModal(col)}
+                      className="rpg-btn-blue inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px]"
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Add Things
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -2263,17 +2795,29 @@ export function MakerStudioClient({
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRevokeError(null);
-                            setRevokeTarget(item);
-                          }}
-                          className="rpg-btn-secondary shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 font-pixel text-[9px] text-[#ff99ac]"
-                        >
-                          <Trash2 className="h-3 w-3" aria-hidden="true" />
-                          Revoke
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openEditPublishedItemModal(col.name, item)
+                            }
+                            className="rpg-btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 font-pixel text-[9px] text-[#8ec8ff]"
+                          >
+                            <Edit3 className="h-3 w-3" aria-hidden="true" />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRevokeError(null);
+                              setRevokeTarget(item);
+                            }}
+                            className="rpg-btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 font-pixel text-[9px] text-[#ff99ac]"
+                          >
+                            <Trash2 className="h-3 w-3" aria-hidden="true" />
+                            Revoke
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2283,6 +2827,615 @@ export function MakerStudioClient({
           )}
         </section>
       </div>
+
+      {/* Edit Collection Tagline Modal (Title is Permanent) */}
+      <RpgModal
+        open={Boolean(editingTaglineCollection)}
+        onClose={() => {
+          if (!savingTagline) setEditingTaglineCollection(null);
+        }}
+        title="EDIT COLLECTION TAGLINE"
+      >
+        {editingTaglineCollection ? (
+          <form onSubmit={handleSaveEditedTagline} className="space-y-4">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label
+                  htmlFor={`${baseId}-locked-col-title`}
+                  className="font-pixel text-xs text-[#cfc3e8]"
+                >
+                  Collection Title
+                </label>
+                <span className="inline-flex items-center gap-1 rounded bg-[#251a3c] px-2 py-0.5 font-pixel text-[9px] text-[#ffd15c] border border-[#9e762a]/60">
+                  <Lock className="h-2.5 w-2.5" aria-hidden="true" />
+                  PERMANENT TITLE
+                </span>
+              </div>
+              <input
+                id={`${baseId}-locked-col-title`}
+                type="text"
+                readOnly
+                value={editingTaglineCollection.name}
+                className="rpg-field-control w-full rounded border-2 border-[#9e762a]/50 bg-[#160f24]/60 px-3.5 py-2 text-[#cfc3e8] cursor-not-allowed"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <label
+                  htmlFor={`${baseId}-edit-col-tagline`}
+                  className="font-pixel text-xs text-[#fdf6e9]"
+                >
+                  Collection Tagline / Description
+                </label>
+                <span className="text-xs text-[#cfc3e8]">
+                  {editTaglineValue.trim().length}/280
+                </span>
+              </div>
+              <textarea
+                id={`${baseId}-edit-col-tagline`}
+                rows={3}
+                maxLength={280}
+                autoFocus
+                value={editTaglineValue}
+                onChange={(e) => setEditTaglineValue(e.target.value)}
+                placeholder="Optional short tagline shown on your profile and collection page..."
+                className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3.5 py-2.5 text-[#fdf6e9] placeholder-[#cfc3e8]/45 focus:border-[#ffd15c] focus:outline-none"
+              />
+            </div>
+
+            {editTaglineError ? (
+              <p role="alert" className="text-xs text-[#ff99ac]">
+                Error: {editTaglineError}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={savingTagline}
+                onClick={() => setEditingTaglineCollection(null)}
+                className="rpg-btn-secondary px-4 py-2 font-pixel text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingTagline}
+                className="rpg-btn-primary inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+              >
+                {savingTagline ? (
+                  <>
+                    <Loader2
+                      className="h-3.5 w-3.5 animate-spin"
+                      aria-hidden="true"
+                    />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Save Tagline
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </RpgModal>
+
+      {/* Edit Existing Item Details Modal */}
+      <RpgModal
+        open={Boolean(editingPublishedItem)}
+        onClose={() => {
+          if (!savingItemEdit) setEditingPublishedItem(null);
+        }}
+        title="EDIT THING DETAILS"
+        wide
+      >
+        {editingPublishedItem ? (
+          <form onSubmit={handleSaveEditedItem} className="space-y-4">
+            <p className="text-xs text-[#cfc3e8]">
+              Editing{" "}
+              <strong className="text-[#ffd15c]">
+                #{String(editingPublishedItem.item.catalogNumber).padStart(4, "0")}
+              </strong>{" "}
+              in{" "}
+              <strong className="text-[#fdf6e9]">
+                {editingPublishedItem.collectionName}
+              </strong>
+              . Changes sync directly to your Personal Data Server (PDS).
+            </p>
+
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-edit-item-name`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Thing Name *
+                </label>
+                <input
+                  id={`${baseId}-edit-item-name`}
+                  type="text"
+                  required
+                  minLength={2}
+                  maxLength={120}
+                  autoFocus
+                  value={editItemName}
+                  onChange={(e) => setEditItemName(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-edit-item-subcat`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Subcategory *
+                </label>
+                <input
+                  id={`${baseId}-edit-item-subcat`}
+                  type="text"
+                  required
+                  minLength={2}
+                  maxLength={120}
+                  value={editItemSubcategory}
+                  onChange={(e) => setEditItemSubcategory(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor={`${baseId}-edit-item-desc`}
+                className="font-pixel text-[11px] text-[#fdf6e9]"
+              >
+                Description *
+              </label>
+              <textarea
+                id={`${baseId}-edit-item-desc`}
+                rows={3}
+                required
+                minLength={10}
+                maxLength={500}
+                value={editItemDescription}
+                onChange={(e) => setEditItemDescription(e.target.value)}
+                className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
+              />
+            </div>
+
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-edit-item-flavor`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Flavor Quote *
+                </label>
+                <input
+                  id={`${baseId}-edit-item-flavor`}
+                  type="text"
+                  required
+                  minLength={3}
+                  maxLength={280}
+                  value={editItemFlavorText}
+                  onChange={(e) => setEditItemFlavorText(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-edit-item-trait`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Pointless Trait *
+                </label>
+                <input
+                  id={`${baseId}-edit-item-trait`}
+                  type="text"
+                  required
+                  minLength={2}
+                  maxLength={80}
+                  value={editItemUselessTrait}
+                  onChange={(e) => setEditItemUselessTrait(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="rpg-slot p-3.5 space-y-3">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="rpg-panel-subtle flex h-20 w-20 shrink-0 items-center justify-center p-1.5">
+                  <img
+                    src={editItemSpriteDataUrl || editingPublishedItem.item.iconUrl}
+                    alt={editItemIconAlt}
+                    className="pixel-art h-full w-full object-contain"
+                  />
+                </div>
+                <div className="space-y-2 flex-1 min-w-[200px]">
+                  <p className="font-pixel text-[10px] text-[#ffd15c]">
+                    {editItemSpriteDataUrl
+                      ? "NEW 512×512px PNG READY"
+                      : "CURRENT SPRITE (OPTIONAL REPLACEMENT)"}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px] text-[#8ec8ff] cursor-pointer">
+                      <ImagePlus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Upload 512×512px PNG
+                      <input
+                        ref={editItemFileRef}
+                        type="file"
+                        accept="image/png"
+                        onChange={handleEditItemPngUpload}
+                        className="sr-only"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={generatingEditSprite}
+                      onClick={() => void handleGenerateEditItemSprite()}
+                      className="rpg-btn-blue inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px]"
+                    >
+                      {generatingEditSprite ? (
+                        <>
+                          <Loader2
+                            className="h-3.5 w-3.5 animate-spin"
+                            aria-hidden="true"
+                          />
+                          Conjuring…
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          Generate in Our Standard Style
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-edit-item-alt`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Sprite Alt Text *
+                </label>
+                <input
+                  id={`${baseId}-edit-item-alt`}
+                  type="text"
+                  required
+                  minLength={5}
+                  maxLength={300}
+                  value={editItemIconAlt}
+                  onChange={(e) => setEditItemIconAlt(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {editItemError ? (
+              <p role="alert" className="text-xs text-[#ff99ac]">
+                Error: {editItemError}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={savingItemEdit}
+                onClick={() => setEditingPublishedItem(null)}
+                className="rpg-btn-secondary px-4 py-2 font-pixel text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingItemEdit}
+                className="rpg-btn-primary inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+              >
+                {savingItemEdit ? (
+                  <>
+                    <Loader2
+                      className="h-3.5 w-3.5 animate-spin"
+                      aria-hidden="true"
+                    />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Save Thing Details
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </RpgModal>
+
+      {/* Add New Things to Existing Collection Modal */}
+      <RpgModal
+        open={Boolean(addingToCollection)}
+        onClose={() => {
+          if (!submittingAddItems) setAddingToCollection(null);
+        }}
+        title="ADD THINGS TO COLLECTION"
+        wide
+      >
+        {addingToCollection ? (
+          <form onSubmit={handleSubmitAddedItems} className="space-y-4">
+            <p className="text-xs text-[#cfc3e8]">
+              Add new unique things to{" "}
+              <strong className="text-[#ffd15c]">
+                {addingToCollection.name}
+              </strong>
+              . Adding things to an all-claimed collection immediately reopens
+              pulls on your profile!
+            </p>
+
+            {addStagedItems.length > 0 ? (
+              <div className="rpg-slot p-3 space-y-2">
+                <p className="font-pixel text-[10px] text-[#4be3a0]">
+                  STAGED TO ADD ({addStagedItems.length}):
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {addStagedItems.map((st) => (
+                    <div
+                      key={st.localId}
+                      className="inline-flex items-center gap-2 rounded border border-[#4be3a0]/50 bg-[#251a3c] px-2.5 py-1 text-xs text-[#fdf6e9]"
+                    >
+                      <img
+                        src={st.spriteDataUrl}
+                        alt=""
+                        className="pixel-art h-5 w-5 object-contain"
+                      />
+                      <span className="truncate max-w-[160px]">{st.name}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAddStagedItems((prev) =>
+                            prev.filter((x) => x.localId !== st.localId)
+                          )
+                        }
+                        className="text-[#ff99ac] hover:underline font-pixel text-[9px]"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-add-item-name`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  New Thing Name *
+                </label>
+                <input
+                  id={`${baseId}-add-item-name`}
+                  type="text"
+                  maxLength={120}
+                  autoFocus
+                  placeholder="e.g., Slightly Bent Souvenir Penny"
+                  value={addName}
+                  onChange={(e) => setAddName(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] placeholder-[#cfc3e8]/45 focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-add-item-subcat`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Subcategory *
+                </label>
+                <input
+                  id={`${baseId}-add-item-subcat`}
+                  type="text"
+                  maxLength={120}
+                  placeholder="e.g., Gift Shop Keepsakes"
+                  value={addSubcategory}
+                  onChange={(e) => setAddSubcategory(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] placeholder-[#cfc3e8]/45 focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor={`${baseId}-add-item-desc`}
+                className="font-pixel text-[11px] text-[#fdf6e9]"
+              >
+                Description *
+              </label>
+              <textarea
+                id={`${baseId}-add-item-desc`}
+                rows={2}
+                maxLength={500}
+                placeholder="Describe this delightfully pointless object..."
+                value={addDescription}
+                onChange={(e) => setAddDescription(e.target.value)}
+                className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] placeholder-[#cfc3e8]/45 focus:border-[#ffd15c] focus:outline-none"
+              />
+            </div>
+
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-add-item-flavor`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Flavor Quote *
+                </label>
+                <input
+                  id={`${baseId}-add-item-flavor`}
+                  type="text"
+                  maxLength={280}
+                  placeholder="Short witty observation..."
+                  value={addFlavorText}
+                  onChange={(e) => setAddFlavorText(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] placeholder-[#cfc3e8]/45 focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-add-item-trait`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Pointless Trait *
+                </label>
+                <input
+                  id={`${baseId}-add-item-trait`}
+                  type="text"
+                  maxLength={80}
+                  placeholder="e.g., +0 Pocket Aerodynamics"
+                  value={addUselessTrait}
+                  onChange={(e) => setAddUselessTrait(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] placeholder-[#cfc3e8]/45 focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="rpg-slot p-3.5 space-y-3">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="rpg-panel-subtle flex h-20 w-20 shrink-0 items-center justify-center p-1.5">
+                  {addSpriteDataUrl ? (
+                    <img
+                      src={addSpriteDataUrl}
+                      alt={addIconAlt || "Staged sprite preview"}
+                      className="pixel-art h-full w-full object-contain"
+                    />
+                  ) : (
+                    <Sparkles
+                      className="h-6 w-6 text-[#ffd15c]/50"
+                      aria-hidden="true"
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-2 flex-1 min-w-[200px]">
+                  <p className="font-pixel text-[10px] text-[#ffd15c]">
+                    512×512px PNG ARTWORK *
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px] text-[#8ec8ff] cursor-pointer">
+                      <ImagePlus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Upload 512×512px PNG
+                      <input
+                        ref={addItemFileRef}
+                        type="file"
+                        accept="image/png"
+                        onChange={handleAddItemPngUpload}
+                        className="sr-only"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={generatingAddSprite}
+                      onClick={() => void handleGenerateAddItemSprite()}
+                      className="rpg-btn-blue inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px]"
+                    >
+                      {generatingAddSprite ? (
+                        <>
+                          <Loader2
+                            className="h-3.5 w-3.5 animate-spin"
+                            aria-hidden="true"
+                          />
+                          Conjuring…
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          Generate in Our Standard Style
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${baseId}-add-item-alt`}
+                  className="font-pixel text-[11px] text-[#fdf6e9]"
+                >
+                  Sprite Alt Text *
+                </label>
+                <input
+                  id={`${baseId}-add-item-alt`}
+                  type="text"
+                  maxLength={300}
+                  placeholder="Describe the icon for screen readers..."
+                  value={addIconAlt}
+                  onChange={(e) => setAddIconAlt(e.target.value)}
+                  className="rpg-field-control w-full rounded border-2 border-[#9e762a] bg-[#160f24] px-3 py-2 text-[#fdf6e9] placeholder-[#cfc3e8]/45 focus:border-[#ffd15c] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {addItemsError ? (
+              <p role="alert" className="text-xs text-[#ff99ac]">
+                Error: {addItemsError}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                disabled={submittingAddItems}
+                onClick={handleStageAnotherAddItem}
+                className="rpg-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 font-pixel text-[10px] text-[#4be3a0]"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                Stage &amp; Craft Another
+              </button>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  disabled={submittingAddItems}
+                  onClick={() => setAddingToCollection(null)}
+                  className="rpg-btn-secondary px-4 py-2 font-pixel text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingAddItems}
+                  className="rpg-btn-primary inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+                >
+                  {submittingAddItems ? (
+                    <>
+                      <Loader2
+                        className="h-3.5 w-3.5 animate-spin"
+                        aria-hidden="true"
+                      />
+                      Minting…
+                    </>
+                  ) : (
+                    <>
+                      <Gift className="h-3.5 w-3.5" aria-hidden="true" />
+                      Add to Collection
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : null}
+      </RpgModal>
 
       {/* Edit Existing Collection Price Modal */}
       <RpgModal

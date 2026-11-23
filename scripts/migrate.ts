@@ -86,6 +86,9 @@ async function main() {
       );
       ALTER TABLE thing_collections ADD COLUMN IF NOT EXISTS price_cents INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE thing_collections ADD COLUMN IF NOT EXISTS platform_fee_bps INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE thing_collections ADD COLUMN IF NOT EXISTS canonical_at_uri TEXT;
+      ALTER TABLE thing_collections ADD COLUMN IF NOT EXISTS canonical_at_cid TEXT;
+      ALTER TABLE thing_collections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
       CREATE INDEX IF NOT EXISTS thing_collections_creator_idx ON thing_collections (creator_did);
 
       CREATE TABLE IF NOT EXISTS collection_purchases (

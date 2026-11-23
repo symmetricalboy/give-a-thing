@@ -365,7 +365,12 @@ export const thingCollections = pgTable(
     totalItems: integer("total_items").notNull(),
     priceCents: integer("price_cents").notNull().default(0),
     platformFeeBps: integer("platform_fee_bps").notNull().default(0),
+    canonicalAtUri: text("canonical_at_uri"),
+    canonicalAtCid: text("canonical_at_cid"),
     createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },

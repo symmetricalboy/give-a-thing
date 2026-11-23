@@ -52,6 +52,12 @@ export interface ProfileMysteryBoxCollection {
   priceCents: number;
   platformFeeBps: number;
   remainingCount: number;
+  revealedCount?: number;
+  previewIcons?: Array<{
+    thingTid: string;
+    iconUrl: string;
+    name: string;
+  }>;
   viewerHasClaimedToday: boolean;
   createdAtIso: string;
 }
@@ -1358,39 +1364,59 @@ export async function getPlayerProfile(
       })
     : false;
 
-  // Resolve active (non-depleted) Mystery Box collections on this profile
+  // Resolve all surviving Mystery Box collections on this profile (both open & all-claimed)
   let activeCollections: ProfileMysteryBoxCollection[] = [];
   if (creatorCollectionRows.length > 0) {
     const colTids = creatorCollectionRows.map((c) => c.collectionTid);
-    const [unclaimedCountRows, viewerClaimRows] = await Promise.all([
-      db
-        .select({
-          collectionId: schema.things.collectionId,
-          value: count(),
-        })
-        .from(schema.things)
-        .where(
-          and(
-            inArray(schema.things.collectionId, colTids),
-            eq(schema.things.status, "unclaimed")
-          )
-        )
-        .groupBy(schema.things.collectionId),
-      viewerDid && !viewerUnlimitedPulls
-        ? db
-            .select({
-              collectionTid: schema.collectionDailyClaims.collectionTid,
-            })
-            .from(schema.collectionDailyClaims)
-            .where(
-              and(
-                eq(schema.collectionDailyClaims.claimerDid, viewerDid),
-                eq(schema.collectionDailyClaims.pullUtcDate, pullUtcDate),
-                inArray(schema.collectionDailyClaims.collectionTid, colTids)
-              )
+    const [unclaimedCountRows, revealedItemRows, viewerClaimRows] =
+      await Promise.all([
+        db
+          .select({
+            collectionId: schema.things.collectionId,
+            value: count(),
+          })
+          .from(schema.things)
+          .where(
+            and(
+              inArray(schema.things.collectionId, colTids),
+              eq(schema.things.status, "unclaimed")
             )
-        : Promise.resolve([]),
-    ]);
+          )
+          .groupBy(schema.things.collectionId),
+        db
+          .select({
+            thingTid: schema.things.thingTid,
+            collectionId: schema.things.collectionId,
+            iconUrl: schema.things.iconUrl,
+            name: schema.things.name,
+            createdAt: schema.things.createdAt,
+          })
+          .from(schema.things)
+          .where(
+            and(
+              inArray(schema.things.collectionId, colTids),
+              inArray(schema.things.status, ["held", "escrowed"])
+            )
+          )
+          .orderBy(
+            desc(schema.things.createdAt),
+            desc(schema.things.catalogNumber)
+          ),
+        viewerDid && !viewerUnlimitedPulls
+          ? db
+              .select({
+                collectionTid: schema.collectionDailyClaims.collectionTid,
+              })
+              .from(schema.collectionDailyClaims)
+              .where(
+                and(
+                  eq(schema.collectionDailyClaims.claimerDid, viewerDid),
+                  eq(schema.collectionDailyClaims.pullUtcDate, pullUtcDate),
+                  inArray(schema.collectionDailyClaims.collectionTid, colTids)
+                )
+              )
+          : Promise.resolve([]),
+      ]);
 
     const remainingMap = new Map<string, number>();
     for (const r of unclaimedCountRows) {
@@ -1398,30 +1424,56 @@ export async function getPlayerProfile(
         remainingMap.set(r.collectionId, Number(r.value));
       }
     }
+
+    const revealedCountMap = new Map<string, number>();
+    const previewIconsMap = new Map<
+      string,
+      Array<{ thingTid: string; iconUrl: string; name: string }>
+    >();
+    for (const item of revealedItemRows) {
+      if (!item.collectionId) continue;
+      revealedCountMap.set(
+        item.collectionId,
+        (revealedCountMap.get(item.collectionId) ?? 0) + 1
+      );
+      const list = previewIconsMap.get(item.collectionId) ?? [];
+      if (list.length < 4) {
+        list.push({
+          thingTid: item.thingTid,
+          iconUrl: item.iconUrl,
+          name: item.name,
+        });
+        previewIconsMap.set(item.collectionId, list);
+      }
+    }
+
     const viewerClaimedTodaySet = new Set(
       viewerClaimRows.map((r) => r.collectionTid)
     );
 
-    // Depleted collections (`remaining === 0`) automatically disappear from the profile
     activeCollections = creatorCollectionRows
       .map((c) => {
         const remainingCount = remainingMap.get(c.collectionTid) ?? 0;
+        const revealedCount = revealedCountMap.get(c.collectionTid) ?? 0;
+        const totalSurviving = remainingCount + revealedCount;
         const isPaid = c.priceCents > 0;
         return {
           collectionTid: c.collectionTid,
           name: c.name,
           description: c.description,
-          totalItems: c.totalItems,
+          totalItems: totalSurviving || c.totalItems,
           priceCents: c.priceCents,
           platformFeeBps: c.platformFeeBps,
           remainingCount,
+          revealedCount,
+          previewIcons: previewIconsMap.get(c.collectionTid) ?? [],
           // Paid boxes have NO once-per-day cooldown—buyers can buy as many pulls as they want
           viewerHasClaimedToday:
             !isPaid && viewerClaimedTodaySet.has(c.collectionTid),
           createdAtIso: c.createdAt.toISOString(),
         };
       })
-      .filter((c) => c.remainingCount > 0);
+      .filter((c) => c.remainingCount + (c.revealedCount ?? 0) > 0);
   }
 
   const followingDids = playerFollowingRows.map((r) => r.subjectDid);

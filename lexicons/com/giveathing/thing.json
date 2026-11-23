@@ -83,6 +83,11 @@
             "maxLength": 64,
             "description": "Unique TID of the creator Mystery Box collection this thing belongs to (omitted for Daily Pull items)."
           },
+          "collection": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT-URI backlink to the parent com.giveathing.collection record (omitted for Daily Pull items)."
+          },
           "discoveredBy": {
             "type": "string",
             "format": "did",
@@ -96,6 +101,11 @@
           "createdAt": {
             "type": "string",
             "format": "datetime"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Optional timestamp when the collection creator edited this thing's details."
           }
         }
       }

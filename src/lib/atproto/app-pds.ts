@@ -383,11 +383,17 @@ export async function backfillCreatedByOnAppPds(): Promise<void> {
       const hasCreatedBy =
         typeof val.createdBy === "string" && val.createdBy.startsWith("did:");
       const expectedCollectionId = collectionIdByTid.get(rkey) ?? null;
+      const expectedCollectionUri = expectedCollectionId
+        ? `at://${repoDid}/${LEXICON_NSIDS.COLLECTION}/${expectedCollectionId}`
+        : null;
       const needsCollectionId =
         Boolean(expectedCollectionId) &&
         val.collectionId !== expectedCollectionId;
+      const needsCollectionBacklink =
+        Boolean(expectedCollectionUri) &&
+        val.collection !== expectedCollectionUri;
 
-      if (hasCreatedBy && !needsCollectionId) {
+      if (hasCreatedBy && !needsCollectionId && !needsCollectionBacklink) {
         continue;
       }
 
@@ -400,7 +406,10 @@ export async function backfillCreatedByOnAppPds(): Promise<void> {
           $type: LEXICON_NSIDS.THING,
           createdBy: hasCreatedBy ? val.createdBy : repoDid,
           ...(expectedCollectionId
-            ? { collectionId: expectedCollectionId }
+            ? {
+                collectionId: expectedCollectionId,
+                collection: expectedCollectionUri,
+              }
             : {}),
         },
       });
@@ -417,6 +426,59 @@ export async function backfillCreatedByOnAppPds(): Promise<void> {
 
     cursor = res.data.cursor;
   } while (cursor);
+
+  // Also backfill com.giveathing.collection/<collectionTid> records on @giveathing.com's PDS
+  const appCollections = await db
+    .select()
+    .from(schema.thingCollections)
+    .where(eq(schema.thingCollections.creatorDid, repoDid));
+
+  for (const col of appCollections) {
+    const colItems = await db
+      .select({
+        thingTid: schema.things.thingTid,
+        canonicalAtUri: schema.things.canonicalAtUri,
+        canonicalAtCid: schema.things.canonicalAtCid,
+      })
+      .from(schema.things)
+      .where(eq(schema.things.collectionId, col.collectionTid));
+
+    if (colItems.length === 0) continue;
+
+    const itemRefs: StrongRef[] = colItems.map((it) => ({
+      uri:
+        it.canonicalAtUri ??
+        `at://${repoDid}/${LEXICON_NSIDS.THING}/${it.thingTid}`,
+      cid: it.canonicalAtCid ?? `bafkrei${it.thingTid}`,
+    }));
+
+    const colPut = await agent.com.atproto.repo.putRecord({
+      repo: repoDid,
+      collection: LEXICON_NSIDS.COLLECTION,
+      rkey: col.collectionTid,
+      record: {
+        $type: LEXICON_NSIDS.COLLECTION,
+        collectionId: col.collectionTid,
+        name: col.name,
+        ...(col.description ? { description: col.description } : {}),
+        createdBy: repoDid,
+        items: itemRefs,
+        totalItems: colItems.length,
+        priceCents: col.priceCents,
+        createdAt: col.createdAt.toISOString(),
+        updatedAt: col.updatedAt.toISOString(),
+      },
+    });
+
+    await db
+      .update(schema.thingCollections)
+      .set({
+        totalItems: colItems.length,
+        canonicalAtUri: colPut.data.uri,
+        canonicalAtCid: colPut.data.cid,
+      })
+      .where(eq(schema.thingCollections.collectionTid, col.collectionTid));
+  }
 }
 
 /**

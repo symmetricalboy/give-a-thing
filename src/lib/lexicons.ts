@@ -3,6 +3,7 @@ import { z } from "zod";
 
 export const LEXICON_NSIDS = {
   THING: "com.giveathing.thing",
+  COLLECTION: "com.giveathing.collection",
   LEDGER: "com.giveathing.ledger",
   HOLDING: "com.giveathing.holding",
   FAVORITE: "com.giveathing.favorite",
@@ -18,6 +19,7 @@ export const ATMOSPHERE_GAME_RKEY = "giveathing";
 export const USER_OAUTH_SCOPES = [
   "atproto",
   `repo:${LEXICON_NSIDS.THING}`,
+  `repo:${LEXICON_NSIDS.COLLECTION}`,
   `repo:${LEXICON_NSIDS.HOLDING}`,
   `repo:${LEXICON_NSIDS.FAVORITE}`,
   `repo:${LEXICON_NSIDS.TRANSFER}`,
@@ -78,9 +80,24 @@ export const ThingRecordSchema = z.object({
   iconAlt: z.string().min(1).max(600),
   createdBy: z.string().startsWith("did:").optional(),
   collectionId: z.string().min(1).max(64).optional(),
+  collection: z.string().startsWith("at://").optional(),
   discoveredBy: z.string().startsWith("did:"),
   pullDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   createdAt: z.string(),
+  updatedAt: z.string().optional(),
+});
+
+export const CollectionRecordSchema = z.object({
+  $type: z.literal(LEXICON_NSIDS.COLLECTION),
+  collectionId: z.string().min(1).max(64),
+  name: z.string().min(1).max(100),
+  description: z.string().max(280).optional(),
+  createdBy: z.string().startsWith("did:"),
+  items: z.array(StrongRefSchema).max(500),
+  totalItems: z.number().int().min(0),
+  priceCents: z.number().int().min(0).optional(),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
 });
 
 export const LedgerRecordSchema = z.object({
@@ -374,6 +391,15 @@ export function buildAtmosphereDefineRecord(params: {
             },
           ],
         },
+      },
+      {
+        nsid: LEXICON_NSIDS.COLLECTION,
+        rkey: "any",
+        role: "inventory",
+        label: "Creator Mystery Box Collections",
+        acquire: `${cleanUrl}/make`,
+        purpose:
+          "Collection manifest records in a creator's PDS holding metadata and StrongRef links to every com.giveathing.thing in their Mystery Box collection.",
       },
       {
         nsid: LEXICON_NSIDS.LEDGER,

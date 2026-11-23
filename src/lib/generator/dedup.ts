@@ -1,4 +1,4 @@
-import { cosineDistance, desc, eq, gt, sql } from "drizzle-orm";
+import { and, cosineDistance, desc, eq, gt, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/db/schema";
 
@@ -98,9 +98,18 @@ export const SEMANTIC_SIMILARITY_THRESHOLD = 0.855;
 export async function checkCatalogCollision(
   db: PostgresJsDatabase<typeof schema>,
   candidateName: string,
-  candidateEmbedding: number[]
+  candidateEmbedding: number[],
+  options?: { excludeThingTid?: string }
 ): Promise<CollisionMatch | null> {
   const fingerprint = computeCanonicalFingerprint(candidateName);
+  const excludeTid = options?.excludeThingTid?.trim();
+
+  const exactWhere = excludeTid
+    ? and(
+        eq(schema.things.canonicalFingerprint, fingerprint),
+        ne(schema.things.thingTid, excludeTid)
+      )
+    : eq(schema.things.canonicalFingerprint, fingerprint);
 
   const [exactRows, exactCachedRows] = await Promise.all([
     db
@@ -110,7 +119,7 @@ export async function checkCatalogCollision(
         category: schema.things.category,
       })
       .from(schema.things)
-      .where(eq(schema.things.canonicalFingerprint, fingerprint))
+      .where(exactWhere)
       .limit(1),
     db
       .select({
@@ -131,7 +140,7 @@ export async function checkCatalogCollision(
       reason: "exact_fingerprint",
     };
   }
-  if (exactCachedRows[0]) {
+  if (exactCachedRows[0] && !excludeTid) {
     return {
       catalogNumber: 0,
       name: exactCachedRows[0].name,
@@ -150,6 +159,13 @@ export async function checkCatalogCollision(
     candidateEmbedding
   )})`;
 
+  const semanticWhere = excludeTid
+    ? and(
+        gt(similarityExpr, SEMANTIC_SIMILARITY_THRESHOLD),
+        ne(schema.things.thingTid, excludeTid)
+      )
+    : gt(similarityExpr, SEMANTIC_SIMILARITY_THRESHOLD);
+
   const [semanticRows, semanticCachedRows] = await Promise.all([
     db
       .select({
@@ -159,19 +175,21 @@ export async function checkCatalogCollision(
         similarity: similarityExpr,
       })
       .from(schema.things)
-      .where(gt(similarityExpr, SEMANTIC_SIMILARITY_THRESHOLD))
+      .where(semanticWhere)
       .orderBy((t) => desc(t.similarity))
       .limit(1),
-    db
-      .select({
-        name: schema.dailyPullCache.name,
-        category: schema.dailyPullCache.category,
-        similarity: cacheSimilarityExpr,
-      })
-      .from(schema.dailyPullCache)
-      .where(gt(cacheSimilarityExpr, SEMANTIC_SIMILARITY_THRESHOLD))
-      .orderBy((t) => desc(t.similarity))
-      .limit(1),
+    excludeTid
+      ? Promise.resolve([])
+      : db
+          .select({
+            name: schema.dailyPullCache.name,
+            category: schema.dailyPullCache.category,
+            similarity: cacheSimilarityExpr,
+          })
+          .from(schema.dailyPullCache)
+          .where(gt(cacheSimilarityExpr, SEMANTIC_SIMILARITY_THRESHOLD))
+          .orderBy((t) => desc(t.similarity))
+          .limit(1),
   ]);
 
   if (semanticRows[0]) {
