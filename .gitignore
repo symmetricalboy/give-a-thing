@@ -17,9 +17,12 @@ next-env.d.ts
 /.local-data/
 /public/generated/
 
-# env
+# env & keys
 .env
-.env*.local
+.env.*
+!.env.example
+*.pem
+*.key
 
 # debug & os
 npm-debug.log*

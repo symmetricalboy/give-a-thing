@@ -8,11 +8,24 @@ export interface SessionPayload {
   handle: string;
 }
 
+const DEV_FALLBACK_SESSION_SECRET =
+  "dev-only-fallback-secret-replace-in-production-32b";
+
 function getSecretKey(): Uint8Array {
-  const secret =
-    process.env.SESSION_SECRET ??
-    "dev-only-fallback-secret-replace-in-production-32b";
-  return new TextEncoder().encode(secret);
+  const configured = process.env.SESSION_SECRET?.trim();
+  if (
+    !configured ||
+    configured === "replace-with-a-secure-random-32-byte-hex-secret" ||
+    configured === DEV_FALLBACK_SESSION_SECRET
+  ) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "SESSION_SECRET environment variable must be configured in production."
+      );
+    }
+    return new TextEncoder().encode(DEV_FALLBACK_SESSION_SECRET);
+  }
+  return new TextEncoder().encode(configured);
 }
 
 export async function createSessionToken(
