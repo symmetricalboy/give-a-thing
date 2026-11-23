@@ -944,8 +944,26 @@ export async function fulfillPaidCollectionPurchase(params: {
     });
   }
 
+  const [collectionMeta] = await db
+    .select({
+      name: schema.thingCollections.name,
+      description: schema.thingCollections.description,
+      totalItems: schema.thingCollections.totalItems,
+      priceCents: schema.thingCollections.priceCents,
+      platformFeeBps: schema.thingCollections.platformFeeBps,
+    })
+    .from(schema.thingCollections)
+    .where(eq(schema.thingCollections.collectionTid, txResult.collectionTid))
+    .limit(1);
+
   return {
     collectionTid: txResult.collectionTid,
+    collectionName: collectionMeta?.name ?? txResult.thing.category,
+    collectionDescription: collectionMeta?.description ?? null,
+    collectionTotalItems: collectionMeta?.totalItems ?? 5,
+    collectionPriceCents:
+      collectionMeta?.priceCents ?? existingPurchase.amountCents,
+    collectionPlatformFeeBps: collectionMeta?.platformFeeBps ?? 0,
     thingTid: txResult.thing.thingTid,
     catalogNumber: txResult.thing.catalogNumber,
     name: txResult.thing.name,

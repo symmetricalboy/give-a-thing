@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -154,10 +154,34 @@ export function UserProfileClient({
   const [unboxedByCollection, setUnboxedByCollection] = useState<
     Record<string, ClaimedCollectionThingView>
   >({});
+  const [focusUnboxedCollectionTid, setFocusUnboxedCollectionTid] = useState<
+    string | null
+  >(null);
+  const unboxedHeadingRefs = useRef<Record<string, HTMLHeadingElement | null>>(
+    {}
+  );
+
+  // Sync server collections while keeping any sold-out box visible if the viewer just unwrapped its final item
+  useEffect(() => {
+    setMysteryBoxes((prev) => {
+      const serverTids = new Set(activeCollections.map((c) => c.collectionTid));
+      const preservedUnboxed = prev.filter(
+        (b) =>
+          !serverTids.has(b.collectionTid) &&
+          Boolean(unboxedByCollection[b.collectionTid])
+      );
+      return [...preservedUnboxed, ...activeCollections];
+    });
+  }, [activeCollections, unboxedByCollection]);
 
   useEffect(() => {
-    setMysteryBoxes(activeCollections);
-  }, [activeCollections]);
+    if (!focusUnboxedCollectionTid) return;
+    const el = unboxedHeadingRefs.current[focusUnboxedCollectionTid];
+    if (el) {
+      el.focus();
+      setFocusUnboxedCollectionTid(null);
+    }
+  }, [focusUnboxedCollectionTid, unboxedByCollection, mysteryBoxes]);
 
   // Handle Stripe Checkout return (`?checkout_session_id=...`) or cancel (`?checkout_cancelled=...`)
   useEffect(() => {
@@ -199,6 +223,11 @@ export function UserProfileClient({
             error?: string;
             thing?: ClaimedCollectionThingView & {
               collectionTid: string;
+              collectionName?: string;
+              collectionDescription?: string | null;
+              collectionTotalItems?: number;
+              collectionPriceCents?: number;
+              collectionPlatformFeeBps?: number;
               remainingCount: number;
             };
           };
@@ -221,11 +250,11 @@ export function UserProfileClient({
                 return [
                   {
                     collectionTid: resolvedTid,
-                    name: data.thing!.category,
-                    description: null,
-                    totalItems: 5,
-                    priceCents: 0,
-                    platformFeeBps: 0,
+                    name: data.thing!.collectionName || data.thing!.category,
+                    description: data.thing!.collectionDescription ?? null,
+                    totalItems: data.thing!.collectionTotalItems ?? 5,
+                    priceCents: data.thing!.collectionPriceCents ?? 0,
+                    platformFeeBps: data.thing!.collectionPlatformFeeBps ?? 0,
                     remainingCount: data.thing!.remainingCount,
                     viewerHasClaimedToday: false,
                     createdAtIso: new Date().toISOString(),
@@ -243,6 +272,7 @@ export function UserProfileClient({
                   : b
               );
             });
+            setFocusUnboxedCollectionTid(resolvedTid);
           }
           router.refresh();
         })
@@ -392,6 +422,7 @@ export function UserProfileClient({
             : b
         )
       );
+      setFocusUnboxedCollectionTid(collectionTid);
       router.refresh();
     } catch {
       setBoxErrors((prev) => ({
@@ -716,8 +747,11 @@ export function UserProfileClient({
                       </div>
 
                       <span className="rounded border border-[#ffd15c]/60 bg-[#251a3c] px-2.5 py-1 font-pixel text-[10px] text-[#ffd15c]">
-                        {box.remainingCount}{" "}
-                        {box.remainingCount === 1 ? "THING" : "THINGS"} LEFT
+                        {box.remainingCount === 0 && unboxed
+                          ? "FINAL THING · SOLD OUT!"
+                          : `${box.remainingCount} ${
+                              box.remainingCount === 1 ? "THING" : "THINGS"
+                            } LEFT`}
                       </span>
                     </div>
 
@@ -752,7 +786,13 @@ export function UserProfileClient({
                             </span>
                           </div>
 
-                          <h4 className="font-pixel text-sm sm:text-base text-[#fdf6e9]">
+                          <h4
+                            ref={(el) => {
+                              unboxedHeadingRefs.current[box.collectionTid] = el;
+                            }}
+                            tabIndex={-1}
+                            className="font-pixel text-sm sm:text-base text-[#fdf6e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffd15c]"
+                          >
                             {unboxed.name}
                           </h4>
 

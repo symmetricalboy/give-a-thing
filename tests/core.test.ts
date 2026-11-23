@@ -850,6 +850,8 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(profileClientSrc).toContain("hasFreeMysteryBoxWithTimer");
     expect(profileClientSrc).toContain("Buy a Mystery Thing");
     expect(profileClientSrc).toContain("Buy Another");
+    expect(profileClientSrc).not.toContain("setMysteryBoxes(activeCollections)");
+    expect(profileClientSrc).toContain("FINAL THING · SOLD OUT!");
 
     expect(PLATFORM_STRIPE_ACCOUNT_SENTINEL).toBe("platform");
     expect(parseStripeWebhookSecrets(undefined)).toEqual([]);
