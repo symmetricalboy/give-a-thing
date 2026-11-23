@@ -194,6 +194,17 @@ describe("Give a Thing — Core Engine Verification", () => {
       format: "did",
       description: expect.any(String),
     });
+    expect(thingLexiconJson.defs.main.record.properties.collectionId).toEqual({
+      type: "string",
+      maxLength: 64,
+      description: expect.any(String),
+    });
+
+    const validCollectionThing = ThingRecordSchema.parse({
+      ...validThing,
+      collectionId: tid1,
+    });
+    expect(validCollectionThing.collectionId).toBe(tid1);
 
     expect(USER_OAUTH_SCOPES).toContain(`repo:${LEXICON_NSIDS.FAVORITE}`);
 
@@ -516,6 +527,20 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(feedTimelineSrc).toContain("Everyone");
     expect(feedTimelineSrc).toContain("Following");
     expect(feedTimelineSrc).toContain("You");
+    expect(feedTimelineSrc).toContain(
+      "discovered a new thing in the Daily Pull"
+    );
+    expect(feedTimelineSrc).toContain(
+      "discovered a new thing in a Mystery Box"
+    );
+    expect(feedTimelineSrc).toContain(
+      "purchased a new thing from a Mystery Box"
+    );
+    expect(feedTimelineSrc).toContain("published a new Mystery Box collection");
+    expect(feedTimelineSrc).toContain(
+      "sold out of their Mystery Box collection"
+    );
+    expect(feedTimelineSrc).not.toContain("unwrapped a new thing");
     expect(feedTimelineSrc).not.toContain(">\n                Friends\n");
 
     const findSrc = fs.readFileSync(
@@ -862,8 +887,22 @@ describe("Give a Thing — Core Engine Verification", () => {
       path.join(process.cwd(), "src", "app", "thing", "[tid]", "page.tsx"),
       "utf8"
     );
+    expect(thingPageSrc).toContain("Discovered in the Daily Pull by");
+    expect(thingPageSrc).not.toContain("Discovered in the daily pull by");
     expect(thingPageSrc).toContain("Discovered in a Mystery Box by");
     expect(thingPageSrc).toContain("Purchased from a Mystery Box by");
+    expect(thingPageSrc).toContain("/collection/");
+
+    const collectionPagePath = path.join(
+      process.cwd(),
+      "src",
+      "app",
+      "collection",
+      "[collectionTid]",
+      "page.tsx"
+    );
+    expect(fs.existsSync(collectionPagePath)).toBe(true);
+    expect(profileClientSrc).toContain("View Collection");
 
     expect(PLATFORM_STRIPE_ACCOUNT_SENTINEL).toBe("platform");
     expect(parseStripeWebhookSecrets(undefined)).toEqual([]);

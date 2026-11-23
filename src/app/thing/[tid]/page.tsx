@@ -79,9 +79,18 @@ export default async function ThingInspectorPage({
           {/* Item Details */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded border border-[#4da6ff]/50 bg-[#160f24] px-2.5 py-0.5 text-xs font-medium text-[#8ec8ff]">
-                {detail.category}
-              </span>
+              {detail.collectionId ? (
+                <Link
+                  href={`/collection/${encodeURIComponent(detail.collectionId)}`}
+                  className="rounded border border-[#4da6ff]/65 bg-[#160f24] px-2.5 py-0.5 text-xs font-medium text-[#8ec8ff] transition-colors hover:border-[#ffd15c] hover:text-[#ffd15c]"
+                >
+                  {detail.category}
+                </Link>
+              ) : (
+                <span className="rounded border border-[#4da6ff]/50 bg-[#160f24] px-2.5 py-0.5 text-xs font-medium text-[#8ec8ff]">
+                  {detail.category}
+                </span>
+              )}
               <span className="rounded bg-[#160f24] px-2.5 py-0.5 text-xs text-[#cfc3e8]">
                 {detail.subcategory}
               </span>
@@ -210,7 +219,7 @@ export default async function ThingInspectorPage({
 
                       {hop.via === "daily_pull" ? (
                         <span>
-                          Discovered in the daily pull by{" "}
+                          Discovered in the Daily Pull by{" "}
                           <Link
                             href={`/u/${encodeURIComponent(hop.toUser.handle)}`}
                             className="font-semibold text-[#ffd15c] hover:underline"

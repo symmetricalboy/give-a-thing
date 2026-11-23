@@ -7,7 +7,7 @@ import { getCurrentSession } from "@/lib/session";
 import { createPaidCollectionCheckoutSession } from "@/lib/stripe/connect";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ collectionTid: string }> }
 ) {
   const session = await getCurrentSession();
@@ -20,10 +20,21 @@ export async function POST(
 
   const { collectionTid } = await params;
 
+  let returnContext: "profile" | "collection" = "profile";
+  try {
+    const body = (await req.json()) as { returnContext?: string };
+    if (body?.returnContext === "collection") {
+      returnContext = "collection";
+    }
+  } catch {
+    // Empty request body defaults to "profile"
+  }
+
   try {
     const checkout = await createPaidCollectionCheckoutSession({
       collectionTid,
       buyerDid: session.did,
+      returnContext,
     });
     return NextResponse.json({ ok: true, ...checkout });
   } catch (err) {

@@ -197,6 +197,7 @@ export function MakerStudioClient({
   const [studioError, setStudioError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [publishedBanner, setPublishedBanner] = useState<{
+    collectionTid?: string;
     name: string;
     totalItems: number;
   } | null>(null);
@@ -831,7 +832,11 @@ export function MakerStudioClient({
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;
-        collection?: { name: string; totalItems: number };
+        collection?: {
+          collectionTid?: string;
+          name: string;
+          totalItems: number;
+        };
         collections?: CreatorStudioCollectionSummary[];
       };
 
@@ -846,6 +851,7 @@ export function MakerStudioClient({
         setCollections(data.collections);
       }
       setPublishedBanner({
+        collectionTid: data.collection?.collectionTid,
         name: data.collection?.name ?? collectionName.trim(),
         totalItems: data.collection?.totalItems ?? draftItems.length,
       });
@@ -984,13 +990,24 @@ export function MakerStudioClient({
               players to draw once per day!
             </p>
           </div>
-          <Link
-            href={`/u/${encodeURIComponent(creatorHandle)}`}
-            className="rpg-btn-primary shrink-0 inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
-          >
-            See Mystery Box
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {publishedBanner.collectionTid ? (
+              <Link
+                href={`/collection/${encodeURIComponent(publishedBanner.collectionTid)}`}
+                className="rpg-btn-primary inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
+              >
+                Open Collection Page
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            ) : null}
+            <Link
+              href={`/u/${encodeURIComponent(creatorHandle)}`}
+              className="rpg-btn-secondary inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs text-[#8ec8ff]"
+            >
+              View Profile
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </div>
         </section>
       ) : null}
 
@@ -2147,7 +2164,12 @@ export function MakerStudioClient({
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
-                        {col.name}
+                        <Link
+                          href={`/collection/${encodeURIComponent(col.collectionTid)}`}
+                          className="hover:underline"
+                        >
+                          {col.name}
+                        </Link>
                       </h2>
                       {col.priceCents > 0 ? (
                         <span className="rounded border border-[#ffd15c]/70 bg-[#160f24] px-2.5 py-0.5 font-pixel text-[9px] text-[#ffd15c]">

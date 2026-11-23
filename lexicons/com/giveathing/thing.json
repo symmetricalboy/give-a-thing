@@ -78,6 +78,11 @@
             "format": "did",
             "description": "DID of the account that created this thing (@giveathing.com for generated pulls, or the collection creator's DID)."
           },
+          "collectionId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Unique TID of the creator Mystery Box collection this thing belongs to (omitted for Daily Pull items)."
+          },
           "discoveredBy": {
             "type": "string",
             "format": "did",

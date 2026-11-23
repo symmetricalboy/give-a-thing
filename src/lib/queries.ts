@@ -25,6 +25,7 @@ import {
   isOfferRevocableNow,
 } from "@/lib/trading/trade-service";
 import { getPublicAppUrl } from "@/lib/atproto/oauth";
+import type { FeedEventType } from "@/lib/feed/bus";
 import type { ProvenanceVia } from "@/lib/lexicons";
 import {
   fetchRichBlueskyProfile,
@@ -78,6 +79,7 @@ export interface ThingCardItem {
   pullUtcDate: string;
   status: "held" | "escrowed";
   transferCount: number;
+  collectionId?: string | null;
   favoriteSlot?: number | null;
   canonicalAtUri: string | null;
   currentHoldingAtUri: string | null;
@@ -88,7 +90,7 @@ export interface ThingCardItem {
 
 export interface FeedItemDTO {
   id: number;
-  eventType: "daily_pull" | "direct_gift" | "escrow_claim";
+  eventType: FeedEventType;
   sequenceNum: number;
   note: string | null;
   createdAtIso: string;
@@ -99,11 +101,18 @@ export interface FeedItemDTO {
     catalogNumber: number;
     name: string;
     category: string;
+    collectionId: string | null;
     uselessTrait: string;
     iconUrl: string;
     iconAlt: string;
     transferCount: number;
-  };
+  } | null;
+  collection: {
+    collectionTid: string;
+    name: string;
+    totalItems: number;
+    priceCents: number;
+  } | null;
 }
 
 async function fetchUsersMap(
@@ -276,22 +285,62 @@ export async function getFeedPage(params: {
     return { items: [], nextCursor: null };
   }
 
-  const thingTids = Array.from(new Set(pageRows.map((e) => e.thingTid)));
-  const thingRows = await db
-    .select({
-      thingTid: schema.things.thingTid,
-      catalogNumber: schema.things.catalogNumber,
-      name: schema.things.name,
-      category: schema.things.category,
-      uselessTrait: schema.things.uselessTrait,
-      iconUrl: schema.things.iconUrl,
-      iconAlt: schema.things.iconAlt,
-      transferCount: schema.things.transferCount,
-    })
-    .from(schema.things)
-    .where(inArray(schema.things.thingTid, thingTids));
+  const thingTids = Array.from(
+    new Set(
+      pageRows
+        .map((e) => e.thingTid)
+        .filter((tid): tid is string => Boolean(tid))
+    )
+  );
+  const collectionTids = Array.from(
+    new Set(
+      pageRows
+        .map((e) => e.collectionTid)
+        .filter((tid): tid is string => Boolean(tid))
+    )
+  );
 
-  const thingMap = new Map(thingRows.map((t) => [t.thingTid, t]));
+  const [thingRows, collectionRows] = await Promise.all([
+    thingTids.length > 0
+      ? db
+          .select({
+            thingTid: schema.things.thingTid,
+            catalogNumber: schema.things.catalogNumber,
+            name: schema.things.name,
+            category: schema.things.category,
+            collectionId: schema.things.collectionId,
+            uselessTrait: schema.things.uselessTrait,
+            iconUrl: schema.things.iconUrl,
+            iconAlt: schema.things.iconAlt,
+            transferCount: schema.things.transferCount,
+          })
+          .from(schema.things)
+          .where(inArray(schema.things.thingTid, thingTids))
+      : Promise.resolve([]),
+    collectionTids.length > 0
+      ? db
+          .select({
+            collectionTid: schema.thingCollections.collectionTid,
+            name: schema.thingCollections.name,
+            totalItems: schema.thingCollections.totalItems,
+            priceCents: schema.thingCollections.priceCents,
+          })
+          .from(schema.thingCollections)
+          .where(
+            inArray(schema.thingCollections.collectionTid, collectionTids)
+          )
+      : Promise.resolve([]),
+  ]);
+
+  const thingMap = new Map(
+    thingRows.map((t) => [
+      t.thingTid,
+      { ...t, collectionId: t.collectionId ?? null },
+    ])
+  );
+  const collectionMap = new Map(
+    collectionRows.map((c) => [c.collectionTid, c])
+  );
 
   const userDids: string[] = [];
   for (const e of pageRows) {
@@ -302,11 +351,16 @@ export async function getFeedPage(params: {
 
   const items: FeedItemDTO[] = [];
   for (const e of pageRows) {
-    const t = thingMap.get(e.thingTid);
-    if (!t) continue;
+    const t = e.thingTid ? (thingMap.get(e.thingTid) ?? null) : null;
+    const col = e.collectionTid
+      ? (collectionMap.get(e.collectionTid) ?? null)
+      : t?.collectionId
+        ? (collectionMap.get(t.collectionId) ?? null)
+        : null;
+    if (!t && !col) continue;
     items.push({
       id: e.id,
-      eventType: e.eventType as "daily_pull" | "direct_gift" | "escrow_claim",
+      eventType: e.eventType as FeedEventType,
       sequenceNum: e.sequenceNum,
       note: e.note,
       createdAtIso: e.createdAt.toISOString(),
@@ -315,6 +369,7 @@ export async function getFeedPage(params: {
         ? userMap.get(e.targetDid) ?? fallbackBrief(e.targetDid)
         : null,
       thing: t,
+      collection: col,
     });
   }
 
@@ -778,6 +833,7 @@ function mapThingRowToCard(
     pullUtcDate: r.pullUtcDate,
     status: r.status as "held" | "escrowed",
     transferCount: r.transferCount,
+    collectionId: r.collectionId ?? null,
     favoriteSlot,
     canonicalAtUri: r.canonicalAtUri,
     currentHoldingAtUri: r.currentHoldingAtUri,
@@ -786,6 +842,167 @@ function mapThingRowToCard(
       userMap.get(r.discovererDid) ?? fallbackBrief(r.discovererDid),
     currentOwner:
       userMap.get(r.currentOwnerDid) ?? fallbackBrief(r.currentOwnerDid),
+  };
+}
+
+export interface CollectionLandingPageData {
+  collection: ProfileMysteryBoxCollection & {
+    revealedCount: number;
+  };
+  creator: PublicUserBrief;
+  revealedItems: ThingCardItem[];
+  viewerUnlimitedPulls: boolean;
+  nextPullUtcIso: string;
+}
+
+export async function getCollectionLandingPageData(
+  collectionTid: string,
+  viewerDid?: string | null
+): Promise<CollectionLandingPageData | null> {
+  await releaseExpiredCollectionReservations();
+
+  const db = getDb();
+  const [collectionRow] = await db
+    .select()
+    .from(schema.thingCollections)
+    .where(eq(schema.thingCollections.collectionTid, collectionTid))
+    .limit(1);
+
+  if (!collectionRow) return null;
+
+  const pullUtcDate = getCurrentUtcDateString();
+  const nextPullUtcIso = getNextUtcMidnightIso();
+
+  const latestActivityExpr = sql`GREATEST(
+    ${schema.things.createdAt},
+    COALESCE(
+      (
+        SELECT MAX(pe.occurred_at)
+        FROM provenance_entries pe
+        WHERE pe.thing_tid = ${schema.things.thingTid}
+      ),
+      ${schema.things.createdAt}
+    )
+  )`;
+
+  const [
+    creatorRows,
+    revealedRows,
+    unclaimedCountRes,
+    viewerUserRows,
+    viewerFavoriteRows,
+  ] = await Promise.all([
+    db
+      .select({
+        did: schema.users.did,
+        handle: schema.users.handle,
+        displayName: schema.users.displayName,
+        avatarUrl: schema.users.avatarUrl,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.did, collectionRow.creatorDid))
+      .limit(1),
+    db
+      .select()
+      .from(schema.things)
+      .where(
+        and(
+          eq(schema.things.collectionId, collectionTid),
+          inArray(schema.things.status, ["held", "escrowed"])
+        )
+      )
+      .orderBy(desc(latestActivityExpr), desc(schema.things.catalogNumber)),
+    db
+      .select({ value: count() })
+      .from(schema.things)
+      .where(
+        and(
+          eq(schema.things.collectionId, collectionTid),
+          eq(schema.things.status, "unclaimed")
+        )
+      ),
+    viewerDid
+      ? db
+          .select({ did: schema.users.did, handle: schema.users.handle })
+          .from(schema.users)
+          .where(eq(schema.users.did, viewerDid))
+          .limit(1)
+      : Promise.resolve([]),
+    viewerDid
+      ? db
+          .select()
+          .from(schema.userFavoriteThings)
+          .where(eq(schema.userFavoriteThings.userDid, viewerDid))
+      : Promise.resolve([]),
+  ]);
+
+  const viewerUnlimitedPulls = viewerDid
+    ? isUnlimitedPullAccount({
+        did: viewerDid,
+        handle: viewerUserRows[0]?.handle ?? null,
+      })
+    : false;
+
+  const isPaid = collectionRow.priceCents > 0;
+  let viewerHasClaimedToday = false;
+  if (viewerDid && !viewerUnlimitedPulls && !isPaid) {
+    const [claimRow] = await db
+      .select({ collectionTid: schema.collectionDailyClaims.collectionTid })
+      .from(schema.collectionDailyClaims)
+      .where(
+        and(
+          eq(schema.collectionDailyClaims.collectionTid, collectionTid),
+          eq(schema.collectionDailyClaims.claimerDid, viewerDid),
+          eq(schema.collectionDailyClaims.pullUtcDate, pullUtcDate)
+        )
+      )
+      .limit(1);
+    viewerHasClaimedToday = Boolean(claimRow);
+  }
+
+  const userMap = await fetchUsersMap([
+    collectionRow.creatorDid,
+    ...revealedRows.flatMap((t) => [t.discovererDid, t.currentOwnerDid]),
+  ]);
+
+  const favSlotByTid = new Map(
+    viewerFavoriteRows.map((f) => [f.thingTid, f.slot])
+  );
+
+  const creator =
+    creatorRows[0] ??
+    userMap.get(collectionRow.creatorDid) ??
+    fallbackBrief(collectionRow.creatorDid);
+
+  const revealedItems = revealedRows.map((r) =>
+    mapThingRowToCard(
+      r,
+      userMap,
+      viewerDid && r.currentOwnerDid === viewerDid
+        ? (favSlotByTid.get(r.thingTid) ?? null)
+        : null
+    )
+  );
+
+  const remainingCount = Number(unclaimedCountRes[0]?.value ?? 0);
+
+  return {
+    collection: {
+      collectionTid: collectionRow.collectionTid,
+      name: collectionRow.name,
+      description: collectionRow.description,
+      totalItems: collectionRow.totalItems,
+      priceCents: collectionRow.priceCents,
+      platformFeeBps: collectionRow.platformFeeBps,
+      remainingCount,
+      revealedCount: revealedItems.length,
+      viewerHasClaimedToday,
+      createdAtIso: collectionRow.createdAt.toISOString(),
+    },
+    creator,
+    revealedItems,
+    viewerUnlimitedPulls,
+    nextPullUtcIso,
   };
 }
 

@@ -241,14 +241,18 @@ export const feedEvents = pgTable(
   "feed_events",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
-    eventType: varchar("event_type", { length: 24 }).notNull(),
+    eventType: varchar("event_type", { length: 32 }).notNull(),
     actorDid: text("actor_did")
       .notNull()
       .references(() => users.did),
     targetDid: text("target_did").references(() => users.did),
-    thingTid: text("thing_tid")
-      .notNull()
-      .references(() => things.thingTid),
+    thingTid: text("thing_tid").references(() => things.thingTid, {
+      onDelete: "cascade",
+    }),
+    collectionTid: text("collection_tid").references(
+      () => thingCollections.collectionTid,
+      { onDelete: "cascade" }
+    ),
     sequenceNum: integer("sequence_num").notNull().default(0),
     note: varchar("note", { length: 140 }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -259,6 +263,7 @@ export const feedEvents = pgTable(
     index("feed_events_created_idx").on(table.createdAt),
     index("feed_events_actor_idx").on(table.actorDid),
     index("feed_events_target_idx").on(table.targetDid),
+    index("feed_events_collection_idx").on(table.collectionTid),
   ]
 );
 

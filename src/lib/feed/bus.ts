@@ -1,11 +1,21 @@
 import { EventEmitter } from "node:events";
 
+export type FeedEventType =
+  | "daily_pull"
+  | "mystery_box"
+  | "mystery_box_purchase"
+  | "collection_published"
+  | "collection_sold_out"
+  | "direct_gift"
+  | "escrow_claim";
+
 export interface LiveFeedBroadcastPayload {
   id: number;
-  eventType: "daily_pull" | "direct_gift" | "escrow_claim";
+  eventType: FeedEventType;
   actorDid: string;
   targetDid: string | null;
-  thingTid: string;
+  thingTid: string | null;
+  collectionTid?: string | null;
   createdAt: string;
 }
 

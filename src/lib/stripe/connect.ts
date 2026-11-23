@@ -402,6 +402,7 @@ export async function createCreatorPayoutOnboardingLink(
 export async function createPaidCollectionCheckoutSession(params: {
   collectionTid: string;
   buyerDid: string;
+  returnContext?: "profile" | "collection";
 }): Promise<{ checkoutUrl: string; sessionId: string; purchaseId: string }> {
   const stripe = getStripeClient();
   await releaseExpiredCollectionReservations();
@@ -548,7 +549,10 @@ export async function createPaidCollectionCheckoutSession(params: {
   });
 
   const appUrl = getPublicAppUrl();
-  const profilePath = `/u/${encodeURIComponent(creator.handle)}`;
+  const returnBasePath =
+    params.returnContext === "collection"
+      ? `/collection/${encodeURIComponent(collection.collectionTid)}`
+      : `/u/${encodeURIComponent(creator.handle)}`;
   const stripeReqOptions = buildStripeRequestOptions(effectiveStripeAccountId);
 
   try {
@@ -586,8 +590,8 @@ export async function createPaidCollectionCheckoutSession(params: {
           buyer_did: params.buyerDid,
           creator_did: creator.did,
         },
-        success_url: `${appUrl}${profilePath}?checkout_session_id={CHECKOUT_SESSION_ID}&collection=${encodeURIComponent(collection.collectionTid)}`,
-        cancel_url: `${appUrl}${profilePath}?checkout_cancelled=${encodeURIComponent(purchaseId)}`,
+        success_url: `${appUrl}${returnBasePath}?checkout_session_id={CHECKOUT_SESSION_ID}&collection=${encodeURIComponent(collection.collectionTid)}`,
+        cancel_url: `${appUrl}${returnBasePath}?checkout_cancelled=${encodeURIComponent(purchaseId)}`,
       },
       stripeReqOptions
     );

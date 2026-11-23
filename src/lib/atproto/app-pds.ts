@@ -355,6 +355,16 @@ export async function backfillCreatedByOnAppPds(): Promise<void> {
       )
     );
 
+  const dbThingRows = await db
+    .select({
+      thingTid: schema.things.thingTid,
+      collectionId: schema.things.collectionId,
+    })
+    .from(schema.things);
+  const collectionIdByTid = new Map(
+    dbThingRows.map((r) => [r.thingTid, r.collectionId])
+  );
+
   let cursor: string | undefined;
   do {
     const res = await agent.com.atproto.repo.listRecords({
@@ -370,7 +380,14 @@ export async function backfillCreatedByOnAppPds(): Promise<void> {
       const rkey = item.uri.split("/").pop();
       if (!rkey) continue;
       const val = item.value as Record<string, unknown>;
-      if (typeof val.createdBy === "string" && val.createdBy.startsWith("did:")) {
+      const hasCreatedBy =
+        typeof val.createdBy === "string" && val.createdBy.startsWith("did:");
+      const expectedCollectionId = collectionIdByTid.get(rkey) ?? null;
+      const needsCollectionId =
+        Boolean(expectedCollectionId) &&
+        val.collectionId !== expectedCollectionId;
+
+      if (hasCreatedBy && !needsCollectionId) {
         continue;
       }
 
@@ -381,7 +398,10 @@ export async function backfillCreatedByOnAppPds(): Promise<void> {
         record: {
           ...val,
           $type: LEXICON_NSIDS.THING,
-          createdBy: repoDid,
+          createdBy: hasCreatedBy ? val.createdBy : repoDid,
+          ...(expectedCollectionId
+            ? { collectionId: expectedCollectionId }
+            : {}),
         },
       });
 

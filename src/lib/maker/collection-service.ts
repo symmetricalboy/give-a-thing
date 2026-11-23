@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import sharp, { type Metadata } from "sharp";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
@@ -492,6 +492,7 @@ export async function publishCreatorCollection(
           icon: blobRef,
           iconAlt: prep.draft.iconAlt,
           createdBy: creatorDid,
+          collectionId: collectionTid,
           discoveredBy: creatorDid,
           pullDate: pullUtcDate,
           createdAt: createdAtIso,
@@ -524,6 +525,32 @@ export async function publishCreatorCollection(
         );
       }
     }
+  }
+
+  const [publishedFeedRow] = await db
+    .insert(schema.feedEvents)
+    .values({
+      eventType: "collection_published",
+      actorDid: creatorDid,
+      targetDid: null,
+      thingTid: null,
+      collectionTid,
+      sequenceNum: 0,
+      note: null,
+      createdAt,
+    })
+    .returning();
+
+  if (publishedFeedRow) {
+    broadcastFeedEvent({
+      id: publishedFeedRow.id,
+      eventType: "collection_published",
+      actorDid: creatorDid,
+      targetDid: null,
+      thingTid: null,
+      collectionTid,
+      createdAt: createdAtIso,
+    });
   }
 
   return {
@@ -786,10 +813,11 @@ export async function finalizeCollectionItemDelivery(params: {
   const [feedRow] = await db
     .insert(schema.feedEvents)
     .values({
-      eventType: "daily_pull",
+      eventType: params.via,
       actorDid: params.recipientDid,
       targetDid: null,
       thingTid: params.thing.thingTid,
+      collectionTid: params.thing.collectionId ?? null,
       sequenceNum: 0,
       note: null,
       createdAt: now,
@@ -799,12 +827,67 @@ export async function finalizeCollectionItemDelivery(params: {
   if (feedRow) {
     broadcastFeedEvent({
       id: feedRow.id,
-      eventType: "daily_pull",
+      eventType: params.via,
       actorDid: params.recipientDid,
       targetDid: null,
       thingTid: params.thing.thingTid,
+      collectionTid: params.thing.collectionId ?? null,
       createdAt: nowIso,
     });
+  }
+
+  // Emit a `collection_sold_out` ledger event once the very last item in the collection is unwrapped
+  if (params.thing.collectionId) {
+    const [openRes, existingSoldOut] = await Promise.all([
+      db
+        .select({ value: count() })
+        .from(schema.things)
+        .where(
+          and(
+            eq(schema.things.collectionId, params.thing.collectionId),
+            inArray(schema.things.status, ["unclaimed", "reserved"])
+          )
+        ),
+      db
+        .select({ id: schema.feedEvents.id })
+        .from(schema.feedEvents)
+        .where(
+          and(
+            eq(schema.feedEvents.collectionTid, params.thing.collectionId),
+            eq(schema.feedEvents.eventType, "collection_sold_out")
+          )
+        )
+        .limit(1),
+    ]);
+
+    if (Number(openRes[0]?.value ?? 0) === 0 && existingSoldOut.length === 0) {
+      const soldOutDate = new Date(now.getTime() + 1);
+      const [soldOutRow] = await db
+        .insert(schema.feedEvents)
+        .values({
+          eventType: "collection_sold_out",
+          actorDid: params.creatorDid,
+          targetDid: params.recipientDid,
+          thingTid: null,
+          collectionTid: params.thing.collectionId,
+          sequenceNum: 0,
+          note: null,
+          createdAt: soldOutDate,
+        })
+        .returning();
+
+      if (soldOutRow) {
+        broadcastFeedEvent({
+          id: soldOutRow.id,
+          eventType: "collection_sold_out",
+          actorDid: params.creatorDid,
+          targetDid: params.recipientDid,
+          thingTid: null,
+          collectionTid: params.thing.collectionId,
+          createdAt: soldOutDate.toISOString(),
+        });
+      }
+    }
   }
 }
 

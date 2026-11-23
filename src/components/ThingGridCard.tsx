@@ -72,7 +72,16 @@ export function ThingGridCard({
       {/* Row 2: Category & Title */}
       <div className="min-w-0 space-y-1.5">
         <p className="text-[11px] font-medium leading-snug text-[#8ec8ff] break-words">
-          {item.category}
+          {item.collectionId ? (
+            <Link
+              href={`/collection/${encodeURIComponent(item.collectionId)}`}
+              className="hover:text-[#ffd15c] hover:underline"
+            >
+              {item.category}
+            </Link>
+          ) : (
+            item.category
+          )}
         </p>
         <h3 className="font-semibold text-sm sm:text-base leading-snug text-[#fdf6e9] break-words">
           <Link

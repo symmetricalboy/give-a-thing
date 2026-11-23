@@ -77,6 +77,7 @@ export const ThingRecordSchema = z.object({
   icon: z.any(),
   iconAlt: z.string().min(1).max(600),
   createdBy: z.string().startsWith("did:").optional(),
+  collectionId: z.string().min(1).max(64).optional(),
   discoveredBy: z.string().startsWith("did:"),
   pullDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   createdAt: z.string(),

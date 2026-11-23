@@ -726,7 +726,12 @@ export function UserProfileClient({
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-pixel text-sm sm:text-base text-[#fdf6e9]">
-                            {box.name}
+                            <Link
+                              href={`/collection/${encodeURIComponent(box.collectionTid)}`}
+                              className="hover:text-[#ffd15c] hover:underline"
+                            >
+                              {box.name}
+                            </Link>
                           </h3>
                           {isPaidBox ? (
                             <span className="inline-flex items-center gap-1 rounded border border-[#4be3a0]/65 bg-[#251a3c] px-2.5 py-0.5 font-pixel text-[10px] text-[#4be3a0]">
@@ -746,13 +751,22 @@ export function UserProfileClient({
                         ) : null}
                       </div>
 
-                      <span className="rounded border border-[#ffd15c]/60 bg-[#251a3c] px-2.5 py-1 font-pixel text-[10px] text-[#ffd15c]">
-                        {box.remainingCount === 0 && unboxed
-                          ? "FINAL THING · SOLD OUT!"
-                          : `${box.remainingCount} ${
-                              box.remainingCount === 1 ? "THING" : "THINGS"
-                            } LEFT`}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/collection/${encodeURIComponent(box.collectionTid)}`}
+                          className="rpg-btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1 font-pixel text-[10px] text-[#8ec8ff]"
+                        >
+                          View Collection
+                          <span className="sr-only">: {box.name}</span>
+                        </Link>
+                        <span className="rounded border border-[#ffd15c]/60 bg-[#251a3c] px-2.5 py-1 font-pixel text-[10px] text-[#ffd15c]">
+                          {box.remainingCount === 0 && unboxed
+                            ? "FINAL THING · SOLD OUT!"
+                            : `${box.remainingCount} ${
+                                box.remainingCount === 1 ? "THING" : "THINGS"
+                              } LEFT`}
+                        </span>
+                      </div>
                     </div>
 
                     {unboxed ? (
@@ -778,9 +792,12 @@ export function UserProfileClient({
 
                         <div className="space-y-2.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded bg-[#251a3c] px-2.5 py-0.5 text-xs text-[#8ec8ff] border border-[#4da6ff]/40">
+                            <Link
+                              href={`/collection/${encodeURIComponent(box.collectionTid)}`}
+                              className="rounded bg-[#251a3c] px-2.5 py-0.5 text-xs text-[#8ec8ff] border border-[#4da6ff]/40 hover:border-[#ffd15c] hover:text-[#ffd15c] transition-colors"
+                            >
                               {unboxed.category}
-                            </span>
+                            </Link>
                             <span className="rounded bg-[#251a3c] px-2.5 py-0.5 text-xs text-[#cfc3e8]">
                               {unboxed.subcategory}
                             </span>

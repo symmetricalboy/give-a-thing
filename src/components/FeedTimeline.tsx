@@ -4,14 +4,17 @@ import React, { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  Coins,
   Flame,
   Globe,
+  PackageOpen,
   RefreshCw,
   Sparkles,
   User,
   Users,
 } from "lucide-react";
 import type { FeedItemDTO } from "@/lib/queries";
+import { formatUsdCents } from "@/lib/stripe/pricing";
 
 interface FeedTimelineProps {
   initialGlobalItems: FeedItemDTO[];
@@ -267,123 +270,226 @@ export function FeedTimeline({
               </div>
             ) : (
               <ul className="space-y-4">
-                {items.map((item) => (
-                  <li key={item.id} className="rpg-panel-subtle p-4 sm:p-5">
-                    <div className="flex items-start gap-3.5">
-                      {/* 16-bit Sprite Slot */}
-                      <Link
-                        href={`/thing/${item.thing.thingTid}`}
-                        className="rpg-slot flex h-16 w-16 shrink-0 items-center justify-center p-1.5 hover:border-[#4da6ff]"
-                      >
-                        <img
-                          src={item.thing.iconUrl}
-                          alt={item.thing.iconAlt}
-                          width={52}
-                          height={52}
-                          className="pixel-art h-13 w-13 object-contain"
-                        />
-                      </Link>
+                {items.map((item) => {
+                  const isCollectionOnlyEvent =
+                    (item.eventType === "collection_published" ||
+                      item.eventType === "collection_sold_out") &&
+                    Boolean(item.collection);
 
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Link
-                              href={`/u/${encodeURIComponent(item.actor.handle)}`}
-                              className="font-semibold text-[#ffd15c] hover:underline"
-                            >
-                              @{item.actor.handle}
-                            </Link>
-
-                            {item.eventType === "daily_pull" && (
-                              <span className="text-[#cfc3e8]">
-                                unwrapped a new thing
-                              </span>
-                            )}
-
-                            {(item.eventType as string) === "created" && (
-                              <span className="text-[#c49bff]">
-                                created a new thing
-                              </span>
-                            )}
-
-                            {item.eventType === "direct_gift" && item.target && (
-                              <>
-                                <span className="text-[#cfc3e8]">gave</span>
-                                <ArrowRight
-                                  className="h-3 w-3 text-[#ff4d6d]"
-                                  aria-hidden="true"
-                                />
-                                <Link
-                                  href={`/u/${encodeURIComponent(item.target.handle)}`}
-                                  className="font-semibold text-[#4be3a0] hover:underline"
-                                >
-                                  @{item.target.handle}
-                                </Link>
-                              </>
-                            )}
-
-                            {item.eventType === "escrow_claim" &&
-                              item.target && (
-                                <>
-                                  <span className="text-[#cfc3e8]">
-                                    claimed a set-aside thing from
-                                  </span>
-                                  <Link
-                                    href={`/u/${encodeURIComponent(item.target.handle)}`}
-                                    className="font-semibold text-[#8ec8ff] hover:underline"
-                                  >
-                                    @{item.target.handle}
-                                  </Link>
-                                </>
-                              )}
-                          </div>
-
-                          <span className="text-[11px] text-[#cfc3e8]/75">
-                            {formatRelativeTime(item.createdAtIso)}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
+                  return (
+                    <li key={item.id} className="rpg-panel-subtle p-4 sm:p-5">
+                      <div className="flex items-start gap-3.5">
+                        {/* 16-bit Sprite or Mystery Box Slot */}
+                        {isCollectionOnlyEvent && item.collection ? (
+                          <Link
+                            href={`/collection/${encodeURIComponent(item.collection.collectionTid)}`}
+                            className="rpg-slot flex h-16 w-16 shrink-0 items-center justify-center p-1.5 hover:border-[#ffd15c]"
+                          >
+                            <img
+                              src={
+                                item.eventType === "collection_sold_out"
+                                  ? "/empty-box.svg"
+                                  : "/icon.svg"
+                              }
+                              alt={
+                                item.eventType === "collection_sold_out"
+                                  ? "16-bit empty mystery box"
+                                  : "16-bit wrapped mystery box"
+                              }
+                              width={52}
+                              height={52}
+                              className="pixel-art h-13 w-13 object-contain"
+                            />
+                          </Link>
+                        ) : item.thing ? (
                           <Link
                             href={`/thing/${item.thing.thingTid}`}
-                            className="font-semibold text-sm text-[#fdf6e9] hover:text-[#ffd15c]"
+                            className="rpg-slot flex h-16 w-16 shrink-0 items-center justify-center p-1.5 hover:border-[#4da6ff]"
                           >
-                            <span className="font-pixel text-[11px] text-[#8ec8ff] mr-1.5">
-                              #{String(item.thing.catalogNumber).padStart(
-                                4,
-                                "0"
-                              )}
-                            </span>
-                            {item.thing.name}
+                            <img
+                              src={item.thing.iconUrl}
+                              alt={item.thing.iconAlt}
+                              width={52}
+                              height={52}
+                              className="pixel-art h-13 w-13 object-contain"
+                            />
                           </Link>
+                        ) : null}
 
-                          {item.sequenceNum >= 1 && (
-                            <span className="inline-flex items-center gap-1 rounded bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff99ac]">
-                              {item.sequenceNum >= 3 ? (
-                                <Flame
-                                  className="h-3 w-3"
-                                  aria-hidden="true"
-                                />
-                              ) : (
-                                <Sparkles
-                                  className="h-3 w-3"
-                                  aria-hidden="true"
-                                />
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Link
+                                href={`/u/${encodeURIComponent(item.actor.handle)}`}
+                                className="font-semibold text-[#ffd15c] hover:underline"
+                              >
+                                @{item.actor.handle}
+                              </Link>
+
+                              {item.eventType === "daily_pull" && (
+                                <span className="text-[#cfc3e8]">
+                                  discovered a new thing in the Daily Pull
+                                </span>
                               )}
-                              Owner #{item.sequenceNum + 1}
+
+                              {item.eventType === "mystery_box" && (
+                                <span className="text-[#cfc3e8]">
+                                  discovered a new thing in a Mystery Box
+                                </span>
+                              )}
+
+                              {item.eventType === "mystery_box_purchase" && (
+                                <span className="text-[#cfc3e8]">
+                                  purchased a new thing from a Mystery Box
+                                </span>
+                              )}
+
+                              {item.eventType === "collection_published" && (
+                                <span className="text-[#4be3a0]">
+                                  published a new Mystery Box collection
+                                </span>
+                              )}
+
+                              {item.eventType === "collection_sold_out" && (
+                                <span className="text-[#ff99ac]">
+                                  sold out of their Mystery Box collection
+                                </span>
+                              )}
+
+                              {(item.eventType as string) === "created" && (
+                                <span className="text-[#c49bff]">
+                                  created a new thing
+                                </span>
+                              )}
+
+                              {item.eventType === "direct_gift" &&
+                                item.target && (
+                                  <>
+                                    <span className="text-[#cfc3e8]">gave</span>
+                                    <ArrowRight
+                                      className="h-3 w-3 text-[#ff4d6d]"
+                                      aria-hidden="true"
+                                    />
+                                    <Link
+                                      href={`/u/${encodeURIComponent(item.target.handle)}`}
+                                      className="font-semibold text-[#4be3a0] hover:underline"
+                                    >
+                                      @{item.target.handle}
+                                    </Link>
+                                  </>
+                                )}
+
+                              {item.eventType === "escrow_claim" &&
+                                item.target && (
+                                  <>
+                                    <span className="text-[#cfc3e8]">
+                                      claimed a set-aside thing from
+                                    </span>
+                                    <Link
+                                      href={`/u/${encodeURIComponent(item.target.handle)}`}
+                                      className="font-semibold text-[#8ec8ff] hover:underline"
+                                    >
+                                      @{item.target.handle}
+                                    </Link>
+                                  </>
+                                )}
+                            </div>
+
+                            <span className="text-[11px] text-[#cfc3e8]/75">
+                              {formatRelativeTime(item.createdAtIso)}
                             </span>
+                          </div>
+
+                          {isCollectionOnlyEvent && item.collection ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={`/collection/${encodeURIComponent(item.collection.collectionTid)}`}
+                                className="inline-flex items-center gap-1.5 font-semibold text-sm text-[#fdf6e9] hover:text-[#ffd15c]"
+                              >
+                                <PackageOpen
+                                  className="h-3.5 w-3.5 text-[#ffd15c]"
+                                  aria-hidden="true"
+                                />
+                                {item.collection.name}
+                              </Link>
+
+                              <span className="rounded bg-[#160f24] px-2 py-0.5 font-pixel text-[9px] text-[#8ec8ff] border border-[#4da6ff]/40">
+                                {item.collection.totalItems} THINGS
+                              </span>
+
+                              {item.eventType === "collection_sold_out" ? (
+                                <span className="rounded bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff99ac] border border-[#ff4d6d]/40">
+                                  SOLD OUT
+                                </span>
+                              ) : item.collection.priceCents > 0 ? (
+                                <span className="inline-flex items-center gap-1 rounded bg-[#4be3a0]/20 px-2 py-0.5 font-pixel text-[9px] text-[#4be3a0]">
+                                  <Coins
+                                    className="h-2.5 w-2.5"
+                                    aria-hidden="true"
+                                  />
+                                  {formatUsdCents(item.collection.priceCents)} /
+                                  PULL
+                                </span>
+                              ) : (
+                                <span className="rounded bg-[#251a3c] px-2 py-0.5 font-pixel text-[9px] text-[#cfc3e8]">
+                                  FREE · 1 / DAY
+                                </span>
+                              )}
+                            </div>
+                          ) : item.thing ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={`/thing/${item.thing.thingTid}`}
+                                className="font-semibold text-sm text-[#fdf6e9] hover:text-[#ffd15c]"
+                              >
+                                <span className="font-pixel text-[11px] text-[#8ec8ff] mr-1.5">
+                                  #
+                                  {String(item.thing.catalogNumber).padStart(
+                                    4,
+                                    "0"
+                                  )}
+                                </span>
+                                {item.thing.name}
+                              </Link>
+
+                              {item.thing.collectionId ? (
+                                <Link
+                                  href={`/collection/${encodeURIComponent(item.thing.collectionId)}`}
+                                  className="rounded border border-[#4da6ff]/45 bg-[#160f24] px-2 py-0.5 text-[11px] text-[#8ec8ff] transition-colors hover:border-[#ffd15c] hover:text-[#ffd15c]"
+                                >
+                                  {item.thing.category}
+                                </Link>
+                              ) : null}
+
+                              {item.sequenceNum >= 1 && (
+                                <span className="inline-flex items-center gap-1 rounded bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff99ac]">
+                                  {item.sequenceNum >= 3 ? (
+                                    <Flame
+                                      className="h-3 w-3"
+                                      aria-hidden="true"
+                                    />
+                                  ) : (
+                                    <Sparkles
+                                      className="h-3 w-3"
+                                      aria-hidden="true"
+                                    />
+                                  )}
+                                  Owner #{item.sequenceNum + 1}
+                                </span>
+                              )}
+                            </div>
+                          ) : null}
+
+                          {item.note && (
+                            <blockquote className="rounded border-l-2 border-[#ff4d6d] bg-[#160f24]/85 px-3 py-1.5 text-xs italic text-[#fdf6e9]/90">
+                              &ldquo;{item.note}&rdquo;
+                            </blockquote>
                           )}
                         </div>
-
-                        {item.note && (
-                          <blockquote className="rounded border-l-2 border-[#ff4d6d] bg-[#160f24]/85 px-3 py-1.5 text-xs italic text-[#fdf6e9]/90">
-                            &ldquo;{item.note}&rdquo;
-                          </blockquote>
-                        )}
                       </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             )}
 

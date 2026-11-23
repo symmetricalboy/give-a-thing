@@ -225,17 +225,60 @@ async function main() {
 
       CREATE TABLE IF NOT EXISTS feed_events (
         id BIGSERIAL PRIMARY KEY,
-        event_type VARCHAR(24) NOT NULL,
+        event_type VARCHAR(32) NOT NULL,
         actor_did TEXT NOT NULL REFERENCES users(did),
         target_did TEXT REFERENCES users(did),
-        thing_tid TEXT NOT NULL REFERENCES things(thing_tid),
+        thing_tid TEXT REFERENCES things(thing_tid) ON DELETE CASCADE,
+        collection_tid TEXT REFERENCES thing_collections(collection_tid) ON DELETE CASCADE,
         sequence_num INTEGER NOT NULL DEFAULT 0,
         note VARCHAR(140),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE feed_events ALTER COLUMN event_type TYPE VARCHAR(32);
+      ALTER TABLE feed_events ALTER COLUMN thing_tid DROP NOT NULL;
+      ALTER TABLE feed_events ADD COLUMN IF NOT EXISTS collection_tid TEXT REFERENCES thing_collections(collection_tid) ON DELETE CASCADE;
       CREATE INDEX IF NOT EXISTS feed_events_created_idx ON feed_events (created_at);
       CREATE INDEX IF NOT EXISTS feed_events_actor_idx ON feed_events (actor_did);
       CREATE INDEX IF NOT EXISTS feed_events_target_idx ON feed_events (target_did);
+      CREATE INDEX IF NOT EXISTS feed_events_collection_idx ON feed_events (collection_tid);
+
+      -- Backfill feed_events for fulfilled paid Mystery Box purchases
+      UPDATE feed_events fe
+      SET event_type = 'mystery_box_purchase',
+          collection_tid = cp.collection_tid
+      FROM collection_purchases cp
+      WHERE fe.thing_tid = cp.thing_tid
+        AND cp.status = 'fulfilled'
+        AND fe.event_type = 'daily_pull';
+
+      -- Backfill feed_events for free Mystery Box draws
+      UPDATE feed_events fe
+      SET event_type = 'mystery_box',
+          collection_tid = t.collection_id
+      FROM things t
+      WHERE fe.thing_tid = t.thing_tid
+        AND t.collection_id IS NOT NULL
+        AND fe.event_type = 'daily_pull';
+
+      -- Backfill collection_sold_out event once for any already sold-out Mystery Box collection
+      INSERT INTO feed_events (event_type, actor_did, target_did, thing_tid, collection_tid, sequence_num, created_at)
+      SELECT 'collection_sold_out', tc.creator_did, NULL, NULL, tc.collection_tid, 0, NOW()
+      FROM thing_collections tc
+      WHERE NOT EXISTS (
+        SELECT 1 FROM things t
+        WHERE t.collection_id = tc.collection_tid
+          AND t.status IN ('unclaimed', 'reserved')
+      )
+      AND EXISTS (
+        SELECT 1 FROM things t
+        WHERE t.collection_id = tc.collection_tid
+          AND t.status IN ('held', 'escrowed')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM feed_events fe
+        WHERE fe.collection_tid = tc.collection_tid
+          AND fe.event_type = 'collection_sold_out'
+      );
 
       CREATE TABLE IF NOT EXISTS oauth_states (
         key TEXT PRIMARY KEY,
