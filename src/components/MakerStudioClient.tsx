@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   CheckCircle2,
+  Coins,
   Edit3,
   ExternalLink,
   Gift,
@@ -17,8 +18,16 @@ import {
   Trash2,
   Wand2,
 } from "lucide-react";
+import {
+  CollectionPricingFields,
+  derivePricingPayload,
+  pricingStateFromCollection,
+  type CollectionPricingFormState,
+} from "@/components/CollectionPricingFields";
 import { RpgModal } from "@/components/RpgModal";
 import type { CreatorStudioCollectionSummary } from "@/lib/maker/collection-service";
+import type { CreatorPayoutStatus } from "@/lib/stripe/connect";
+import { bpsToPercentDisplay, formatUsdCents } from "@/lib/stripe/pricing";
 
 const MIN_COLLECTION_ITEMS = 5;
 const MAX_COLLECTION_ITEMS = 50;
@@ -102,13 +111,22 @@ interface DraftThingItem {
 interface PersistedMakerDraft {
   collectionName: string;
   collectionDescription: string;
+  pricing?: CollectionPricingFormState;
   items: DraftThingItem[];
 }
 
 interface MakerStudioClientProps {
   initialCollections: CreatorStudioCollectionSummary[];
+  initialPayoutStatus: CreatorPayoutStatus;
   creatorHandle: string;
 }
+
+const DEFAULT_PRICING_FORM: CollectionPricingFormState = {
+  isPaid: false,
+  priceDollarsInput: "2.50",
+  donationPreset: "0",
+  customDonationInput: "5",
+};
 
 const WIZARD_STEPS = [
   { step: 1, shortLabel: "1. Collection", title: "Name Your Collection (`category`)" },
@@ -120,6 +138,7 @@ const WIZARD_STEPS = [
 
 export function MakerStudioClient({
   initialCollections,
+  initialPayoutStatus,
   creatorHandle,
 }: MakerStudioClientProps) {
   const baseId = useId();
@@ -130,10 +149,26 @@ export function MakerStudioClient({
   const [studioTab, setStudioTab] = useState<"create" | "manage">("create");
   const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
-  // Collection-level fields (`category` = collectionName)
+  // Collection-level fields (`category` = collectionName) + pull pricing
   const [collectionName, setCollectionName] = useState("");
   const [collectionDescription, setCollectionDescription] = useState("");
+  const [draftPricing, setDraftPricing] =
+    useState<CollectionPricingFormState>(DEFAULT_PRICING_FORM);
   const [draftItems, setDraftItems] = useState<DraftThingItem[]>([]);
+
+  // Stripe Connect payout status + existing-collection price editor modal
+  const [payoutStatus, setPayoutStatus] =
+    useState<CreatorPayoutStatus>(initialPayoutStatus);
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const [stripeReturnNotice, setStripeReturnNotice] = useState<string | null>(
+    null
+  );
+  const [editingPriceCollection, setEditingPriceCollection] =
+    useState<CreatorStudioCollectionSummary | null>(null);
+  const [editPriceForm, setEditPriceForm] =
+    useState<CollectionPricingFormState>(DEFAULT_PRICING_FORM);
+  const [savingPrice, setSavingPrice] = useState(false);
+  const [editPriceError, setEditPriceError] = useState<string | null>(null);
 
   // Active item builder fields (`.thing` lexicon fields)
   const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
@@ -190,6 +225,12 @@ export function MakerStudioClient({
         if (typeof parsed.collectionDescription === "string") {
           setCollectionDescription(parsed.collectionDescription);
         }
+        if (parsed.pricing && typeof parsed.pricing === "object") {
+          setDraftPricing({
+            ...DEFAULT_PRICING_FORM,
+            ...parsed.pricing,
+          });
+        }
         if (Array.isArray(parsed.items)) {
           setDraftItems(parsed.items);
         }
@@ -197,6 +238,57 @@ export function MakerStudioClient({
     } catch {
       // Ignore malformed localStorage
     }
+
+    // Check URL params for returning from Stripe Connect OR deep-linking to edit a collection's price
+    try {
+      const url = new URL(window.location.href);
+      const tabParam = url.searchParams.get("tab");
+      const editPriceTid = url.searchParams.get("editPrice");
+      const stripeParam = url.searchParams.get("stripe");
+
+      if (tabParam === "collections" || editPriceTid) {
+        setStudioTab("manage");
+      }
+
+      if (editPriceTid) {
+        const target = initialCollections.find(
+          (c) => c.collectionTid === editPriceTid
+        );
+        if (target) {
+          setEditPriceError(null);
+          setEditPriceForm(
+            pricingStateFromCollection(target.priceCents, target.platformFeeBps)
+          );
+          setEditingPriceCollection(target);
+        }
+        url.searchParams.delete("editPrice");
+      }
+
+      if (stripeParam === "return") {
+        void fetch("/api/stripe/connect")
+          .then((r) => r.json())
+          .then((d: { status?: CreatorPayoutStatus }) => {
+            if (d.status) {
+              setPayoutStatus(d.status);
+              setStripeReturnNotice(
+                d.status.payoutsReady
+                  ? "Stripe payout method connected! You can now set paid pull prices on new or existing Mystery Boxes."
+                  : "Returned from Stripe—some verification details are still pending before paid pulls can be activated."
+              );
+            }
+          })
+          .catch(() => {});
+        url.searchParams.delete("stripe");
+      }
+
+      if (tabParam || editPriceTid || stripeParam) {
+        url.searchParams.delete("tab");
+        window.history.replaceState({}, "", url.pathname + url.search);
+      }
+    } catch {
+      // Ignore URL cleanup errors
+    }
+
     setHydrated(true);
   }, []);
 
@@ -207,13 +299,106 @@ export function MakerStudioClient({
       const payload: PersistedMakerDraft = {
         collectionName,
         collectionDescription,
+        pricing: draftPricing,
         items: draftItems,
       };
       window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // Ignore storage quota warnings if many 512px PNGs are staged
     }
-  }, [hydrated, collectionName, collectionDescription, draftItems]);
+  }, [
+    hydrated,
+    collectionName,
+    collectionDescription,
+    draftPricing,
+    draftItems,
+  ]);
+
+  const handleStartPayoutOnboarding = async (mode: "onboard" | "update") => {
+    setOnboardingBusy(true);
+    setStudioError(null);
+    setEditPriceError(null);
+    try {
+      const res = await fetch("/api/stripe/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        const msg =
+          data.error ?? "Could not open Stripe payout setup. Please try again.";
+        setStudioError(msg);
+        setEditPriceError(msg);
+        setOnboardingBusy(false);
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      const msg = "Network error starting Stripe payout setup.";
+      setStudioError(msg);
+      setEditPriceError(msg);
+      setOnboardingBusy(false);
+    }
+  };
+
+  const handleSaveEditedPrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPriceCollection) return;
+    setEditPriceError(null);
+
+    const derived = derivePricingPayload(editPriceForm);
+    if (!derived.valid) {
+      setEditPriceError(derived.validationError ?? "Invalid collection price.");
+      return;
+    }
+    if (derived.priceCents > 0 && !payoutStatus.payoutsReady) {
+      setEditPriceError(
+        "Connect and finish your Stripe payout method before charging for pulls."
+      );
+      return;
+    }
+
+    setSavingPrice(true);
+    try {
+      const res = await fetch(
+        `/api/maker/collections/${encodeURIComponent(editingPriceCollection.collectionTid)}/pricing`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            priceCents: derived.priceCents,
+            platformFeeBps: derived.platformFeeBps,
+          }),
+        }
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        collections?: CreatorStudioCollectionSummary[];
+      };
+      if (!res.ok || !data.ok) {
+        setEditPriceError(
+          data.error ?? "Could not update collection pricing."
+        );
+        return;
+      }
+
+      if (data.collections) {
+        setCollections(data.collections);
+      }
+      setStatusMessage(
+        derived.priceCents > 0
+          ? `Updated "${editingPriceCollection.name}" to ${formatUsdCents(derived.priceCents)} per pull!`
+          : `Updated "${editingPriceCollection.name}" to Free ($0.00).`
+      );
+      setEditingPriceCollection(null);
+    } catch {
+      setEditPriceError("Network error updating collection price.");
+    } finally {
+      setSavingPrice(false);
+    }
+  };
 
   const goToStep = (nextStep: 1 | 2 | 3 | 4 | 5) => {
     setStudioError(null);
@@ -596,6 +781,20 @@ export function MakerStudioClient({
       return;
     }
 
+    const pricingPayload = derivePricingPayload(draftPricing);
+    if (!pricingPayload.valid) {
+      setStudioError(
+        pricingPayload.validationError ?? "Invalid collection pricing."
+      );
+      return;
+    }
+    if (pricingPayload.priceCents > 0 && !payoutStatus.payoutsReady) {
+      setStudioError(
+        "Connect and finish your Stripe payout method before publishing a paid Mystery Box."
+      );
+      return;
+    }
+
     setPublishing(true);
     try {
       const res = await fetch("/api/maker/collections", {
@@ -604,6 +803,8 @@ export function MakerStudioClient({
         body: JSON.stringify({
           collectionName: collectionName.trim(),
           collectionDescription: collectionDescription.trim() || undefined,
+          priceCents: pricingPayload.priceCents,
+          platformFeeBps: pricingPayload.platformFeeBps,
           items: draftItems.map((it) => ({
             name: it.name,
             subcategory: it.subcategory,
@@ -639,6 +840,7 @@ export function MakerStudioClient({
       });
       setCollectionName("");
       setCollectionDescription("");
+      setDraftPricing(DEFAULT_PRICING_FORM);
       setDraftItems([]);
       resetCurrentItemFields();
       try {
@@ -740,6 +942,22 @@ export function MakerStudioClient({
           </Link>
         </div>
       </section>
+
+      {/* Stripe Onboarding Return Notice */}
+      {stripeReturnNotice ? (
+        <section className="rpg-panel-blue p-4 sm:p-5 flex items-center justify-between gap-3">
+          <p className="text-xs sm:text-sm text-[#fdf6e9]">
+            {stripeReturnNotice}
+          </p>
+          <button
+            type="button"
+            onClick={() => setStripeReturnNotice(null)}
+            className="rpg-btn-secondary shrink-0 px-3 py-1.5 font-pixel text-[10px]"
+          >
+            Dismiss
+          </button>
+        </section>
+      ) : null}
 
       {/* Published Celebration Banner */}
       {publishedBanner ? (
@@ -1649,12 +1867,22 @@ export function MakerStudioClient({
                     meaning you can revoke &amp; destroy any created thing at any time.
                   </li>
                   <li>
-                    <strong>Profile Mystery Box:</strong> Completed collections appear
-                    on your profile for other players to draw once per day, and
-                    automatically disappear once every item has been claimed!
+                    <strong>Profile Mystery Box:</strong> Free collections let
+                    other players draw once per day, while paid collections have
+                    no daily cooldown so buyers can purchase as many pulls as
+                    they want until the box runs out!
                   </li>
                 </ul>
               </div>
+
+              {/* Mystery Box Pricing, Payout Method & Give a Thing Support % */}
+              <CollectionPricingFields
+                payoutStatus={payoutStatus}
+                onboardingBusy={onboardingBusy}
+                onStartOnboarding={handleStartPayoutOnboarding}
+                value={draftPricing}
+                onChange={setDraftPricing}
+              />
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="font-pixel text-xs text-[#fdf6e9]">
@@ -1793,6 +2021,45 @@ export function MakerStudioClient({
           hidden={studioTab !== "manage"}
           className="space-y-6"
         >
+          {/* Top-level Payout Method Bar for Managing Existing Collections */}
+          <div className="rpg-panel-subtle p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="font-pixel text-xs text-[#ffd15c]">
+                PAYOUTS &amp; EXISTING COLLECTION PRICING
+              </p>
+              <p className="text-xs sm:text-sm text-[#cfc3e8]">
+                {payoutStatus.payoutsReady
+                  ? "Your Stripe payout account is connected! Click Set Price or Change Price on any collection below."
+                  : "Connect your Stripe payout method first, then click Set Price on any collection below to charge per pull."}
+              </p>
+            </div>
+            {payoutStatus.stripeConfigured ? (
+              <button
+                type="button"
+                disabled={onboardingBusy}
+                onClick={() =>
+                  void handleStartPayoutOnboarding(
+                    payoutStatus.payoutsReady ? "update" : "onboard"
+                  )
+                }
+                className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-2 font-pixel text-[10px] ${
+                  payoutStatus.payoutsReady
+                    ? "rpg-btn-secondary text-[#8ec8ff]"
+                    : "rpg-btn-blue"
+                }`}
+              >
+                {onboardingBusy
+                  ? "Opening Stripe…"
+                  : payoutStatus.payoutsReady
+                    ? "Payout Settings"
+                    : payoutStatus.connected
+                      ? "Finish Payout Setup"
+                      : "Connect Payout Method"}
+                <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
+
           {collections.length === 0 ? (
             <div className="rpg-panel p-6 sm:p-8 text-center space-y-3">
               <p className="font-pixel text-sm text-[#ffd15c]">
@@ -1823,6 +2090,18 @@ export function MakerStudioClient({
                       <h2 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
                         {col.name}
                       </h2>
+                      {col.priceCents > 0 ? (
+                        <span className="rounded border border-[#ffd15c]/70 bg-[#160f24] px-2.5 py-0.5 font-pixel text-[9px] text-[#ffd15c]">
+                          {formatUsdCents(col.priceCents)} / PULL
+                          {col.platformFeeBps > 0
+                            ? ` · ${bpsToPercentDisplay(col.platformFeeBps)} SUPPORT`
+                            : ""}
+                        </span>
+                      ) : (
+                        <span className="rounded border border-[#8ec8ff]/55 bg-[#160f24] px-2.5 py-0.5 font-pixel text-[9px] text-[#8ec8ff]">
+                          FREE · 1 / DAY
+                        </span>
+                      )}
                       {col.unclaimedCount > 0 ? (
                         <span className="rounded border border-[#4be3a0]/60 bg-[#160f24] px-2.5 py-0.5 font-pixel text-[9px] text-[#4be3a0]">
                           LIVE ON PROFILE · {col.unclaimedCount} LEFT
@@ -1840,9 +2119,28 @@ export function MakerStudioClient({
                     ) : null}
                   </div>
 
-                  <span className="text-xs text-[#cfc3e8]">
-                    {col.claimedCount} claimed · {col.unclaimedCount} in Mystery Box
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="text-xs text-[#cfc3e8]">
+                      {col.claimedCount} claimed · {col.unclaimedCount} in Mystery Box
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditPriceError(null);
+                        setEditPriceForm(
+                          pricingStateFromCollection(
+                            col.priceCents,
+                            col.platformFeeBps
+                          )
+                        );
+                        setEditingPriceCollection(col);
+                      }}
+                      className="rpg-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 font-pixel text-[10px]"
+                    >
+                      <Coins className="h-3.5 w-3.5" aria-hidden="true" />
+                      {col.priceCents > 0 ? "Change Price" : "Set Price"}
+                    </button>
+                  </div>
                 </div>
 
                 {col.items.length === 0 ? (
@@ -1904,6 +2202,72 @@ export function MakerStudioClient({
           )}
         </section>
       </div>
+
+      {/* Edit Existing Collection Price Modal */}
+      <RpgModal
+        open={Boolean(editingPriceCollection)}
+        onClose={() => {
+          if (!savingPrice) setEditingPriceCollection(null);
+        }}
+        title="MYSTERY BOX PRICING"
+      >
+        {editingPriceCollection ? (
+          <form onSubmit={handleSaveEditedPrice} className="space-y-4">
+            <p className="text-xs sm:text-sm text-[#cfc3e8]">
+              Configure per-pull pricing for{" "}
+              <strong className="text-[#fdf6e9]">
+                {editingPriceCollection.name}
+              </strong>
+              . Changes apply immediately on your profile!
+            </p>
+
+            <CollectionPricingFields
+              payoutStatus={payoutStatus}
+              onboardingBusy={onboardingBusy}
+              onStartOnboarding={handleStartPayoutOnboarding}
+              value={editPriceForm}
+              onChange={setEditPriceForm}
+            />
+
+            {editPriceError ? (
+              <p role="alert" className="text-xs text-[#ff99ac]">
+                Error: {editPriceError}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={savingPrice}
+                onClick={() => setEditingPriceCollection(null)}
+                className="rpg-btn-secondary px-4 py-2 font-pixel text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingPrice}
+                className="rpg-btn-primary inline-flex items-center gap-2 px-4 py-2 font-pixel text-xs"
+              >
+                {savingPrice ? (
+                  <>
+                    <Loader2
+                      className="h-3.5 w-3.5 animate-spin"
+                      aria-hidden="true"
+                    />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <Coins className="h-3.5 w-3.5" aria-hidden="true" />
+                    Save Price
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </RpgModal>
 
       {/* Destructive Confirmation Modal (`dialog` guide: autofocus on safe Cancel action) */}
       <RpgModal

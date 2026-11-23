@@ -6,6 +6,7 @@ import {
   publishCreatorCollection,
 } from "@/lib/maker/collection-service";
 import { getCurrentSession } from "@/lib/session";
+import { syncCreatorPayoutStatus } from "@/lib/stripe/connect";
 
 export async function GET() {
   const session = await getCurrentSession();
@@ -50,7 +51,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const rawBody = await req.json();
+    const rawBody = (await req.json()) as { priceCents?: number };
+    if (typeof rawBody?.priceCents === "number" && rawBody.priceCents > 0) {
+      await syncCreatorPayoutStatus(session.did);
+    }
     const collection = await publishCreatorCollection(session.did, rawBody);
     const collections = await listCreatorCollectionsForStudio(session.did);
     return NextResponse.json({ ok: true, collection, collections });

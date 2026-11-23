@@ -38,10 +38,18 @@ import {
 import { parseGeneratedThingConcept } from "../src/lib/generator/gemini";
 import { USER_GIVEATHING_COLLECTIONS } from "../src/lib/account/delete-account";
 import {
+  CreatorCannotPullOwnBoxError,
   MIN_COLLECTION_ITEMS,
   validateAndNormalize512Png,
   validateCollectionUniqueness,
 } from "../src/lib/maker/collection-service";
+import {
+  bpsToPercentDisplay,
+  estimateMysteryBoxPayoutBreakdown,
+  formatUsdCents,
+  parseUsdInputToCents,
+  percentToBps,
+} from "../src/lib/stripe/pricing";
 import { NEWS_POSTS } from "../src/lib/news";
 
 function collectSourceFiles(dir: string): string[] {
@@ -746,5 +754,93 @@ describe("Give a Thing — Core Engine Verification", () => {
     });
     expect(validSet.parsed.items.length).toBe(5);
     expect(new Set(validSet.fingerprints).size).toBe(5);
+  });
+
+  it("calculates Mystery Box Stripe fee estimates, Give a Thing support %, and enforces self-pull & paid-box rules", () => {
+    expect(parseUsdInputToCents("2.50")).toBe(250);
+    expect(parseUsdInputToCents("$12")).toBe(1200);
+    expect(parseUsdInputToCents("abc")).toBeNull();
+    expect(formatUsdCents(250)).toBe("$2.50");
+    expect(percentToBps(10)).toBe(1000);
+    expect(percentToBps(7.5)).toBe(750);
+    expect(bpsToPercentDisplay(0)).toBe("0%");
+    expect(bpsToPercentDisplay(1000)).toBe("10%");
+    expect(bpsToPercentDisplay(750)).toBe("7.5%");
+
+    // Free Mystery Box ($0.00)
+    const freeBreakdown = estimateMysteryBoxPayoutBreakdown(0, 0);
+    expect(freeBreakdown.isFree).toBe(true);
+    expect(freeBreakdown.valid).toBe(true);
+    expect(freeBreakdown.estimatedStripeFeeCents).toBe(0);
+    expect(freeBreakdown.platformDonationCents).toBe(0);
+
+    // Below Stripe $0.50 USD minimum rejected
+    const tooLow = estimateMysteryBoxPayoutBreakdown(25, 0);
+    expect(tooLow.valid).toBe(false);
+    expect(tooLow.validationError).toMatch(/\$0\.50/);
+
+    // $5.00 pull with 0% Give a Thing donation (default)
+    const fiveDollarZeroDon = estimateMysteryBoxPayoutBreakdown(500, 0);
+    expect(fiveDollarZeroDon.valid).toBe(true);
+    expect(fiveDollarZeroDon.estimatedStripeFeeCents).toBe(45); // 15c + 30c
+    expect(fiveDollarZeroDon.platformDonationCents).toBe(0);
+    expect(fiveDollarZeroDon.estimatedCreatorNetCents).toBe(455);
+
+    // $10.00 pull with 10% Give a Thing donation
+    const tenDollarTenPct = estimateMysteryBoxPayoutBreakdown(1000, 1000);
+    expect(tenDollarTenPct.valid).toBe(true);
+    expect(tenDollarTenPct.estimatedStripeFeeCents).toBe(59); // 29c + 30c
+    expect(tenDollarTenPct.platformDonationCents).toBe(100);
+    expect(tenDollarTenPct.estimatedCreatorNetCents).toBe(841);
+
+    // Negative creator payout ($0.50 with 80% donation -> 31c Stripe + 40c donation = 71c > 50c) rejected
+    const negativeNet = estimateMysteryBoxPayoutBreakdown(50, 8000);
+    expect(negativeNet.valid).toBe(false);
+    expect(negativeNet.estimatedCreatorNetCents).toBeLessThan(1);
+
+    // Creator self-pull error exists and is enforced unconditionally (never exempted for unlimited accounts)
+    const selfErr = new CreatorCannotPullOwnBoxError();
+    expect(selfErr.message).toMatch(/own mystery box/i);
+
+    const collectionServiceSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "lib", "maker", "collection-service.ts"),
+      "utf8"
+    );
+    expect(collectionServiceSrc).not.toContain(
+      "if (!unlimited && collection.creatorDid === params.claimerDid)"
+    );
+    expect(collectionServiceSrc).toContain(
+      "if (collection.creatorDid === params.claimerDid)"
+    );
+
+    const pricingFieldsSrc = fs.readFileSync(
+      path.join(
+        process.cwd(),
+        "src",
+        "components",
+        "CollectionPricingFields.tsx"
+      ),
+      "utf8"
+    );
+    expect(pricingFieldsSrc).toContain("0% (Default)");
+    expect(pricingFieldsSrc).toContain("10%");
+    expect(pricingFieldsSrc).toContain("Custom %");
+    expect(pricingFieldsSrc).toContain("Connect Payout Method");
+
+    const makerStudioSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "MakerStudioClient.tsx"),
+      "utf8"
+    );
+    expect(makerStudioSrc).toContain("Change Price");
+    expect(makerStudioSrc).toContain("Set Price");
+
+    const profileClientSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "components", "UserProfileClient.tsx"),
+      "utf8"
+    );
+    expect(profileClientSrc).not.toContain("isSelf && !viewerUnlimitedPulls");
+    expect(profileClientSrc).toContain("hasFreeMysteryBoxWithTimer");
+    expect(profileClientSrc).toContain("Buy a Mystery Thing");
+    expect(profileClientSrc).toContain("Buy Another");
   });
 });

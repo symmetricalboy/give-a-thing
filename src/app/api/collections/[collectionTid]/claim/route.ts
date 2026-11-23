@@ -3,6 +3,7 @@ import {
   claimFromCollectionMysteryBox,
   CollectionAlreadyClaimedTodayError,
   CollectionSoldOutError,
+  CreatorCannotPullOwnBoxError,
 } from "@/lib/maker/collection-service";
 import { getCurrentSession } from "@/lib/session";
 
@@ -27,6 +28,9 @@ export async function POST(
     });
     return NextResponse.json({ ok: true, thing: result });
   } catch (err) {
+    if (err instanceof CreatorCannotPullOwnBoxError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     if (err instanceof CollectionAlreadyClaimedTodayError) {
       return NextResponse.json(
         { error: err.message, alreadyClaimedToday: true },

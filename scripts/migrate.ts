@@ -29,6 +29,8 @@ async function main() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_account_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_payouts_ready BOOLEAN NOT NULL DEFAULT FALSE;
       CREATE INDEX IF NOT EXISTS users_handle_idx ON users (handle);
 
       CREATE TABLE IF NOT EXISTS things (
@@ -78,9 +80,33 @@ async function main() {
         name VARCHAR(100) NOT NULL,
         description VARCHAR(280),
         total_items INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL DEFAULT 0,
+        platform_fee_bps INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE thing_collections ADD COLUMN IF NOT EXISTS price_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE thing_collections ADD COLUMN IF NOT EXISTS platform_fee_bps INTEGER NOT NULL DEFAULT 0;
       CREATE INDEX IF NOT EXISTS thing_collections_creator_idx ON thing_collections (creator_did);
+
+      CREATE TABLE IF NOT EXISTS collection_purchases (
+        purchase_id TEXT PRIMARY KEY,
+        collection_tid TEXT NOT NULL REFERENCES thing_collections(collection_tid) ON DELETE CASCADE,
+        thing_tid TEXT NOT NULL,
+        buyer_did TEXT NOT NULL REFERENCES users(did) ON DELETE CASCADE,
+        creator_did TEXT NOT NULL REFERENCES users(did) ON DELETE CASCADE,
+        stripe_account_id TEXT NOT NULL,
+        checkout_session_id TEXT UNIQUE,
+        payment_intent_id TEXT,
+        amount_cents INTEGER NOT NULL,
+        platform_fee_cents INTEGER NOT NULL DEFAULT 0,
+        status VARCHAR(24) NOT NULL DEFAULT 'pending',
+        expires_at TIMESTAMPTZ NOT NULL,
+        fulfilled_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS collection_purchases_buyer_idx ON collection_purchases (buyer_did);
+      CREATE INDEX IF NOT EXISTS collection_purchases_collection_idx ON collection_purchases (collection_tid);
+      CREATE INDEX IF NOT EXISTS collection_purchases_status_exp_idx ON collection_purchases (status, expires_at);
 
       CREATE TABLE IF NOT EXISTS collection_daily_claims (
         collection_tid TEXT NOT NULL REFERENCES thing_collections(collection_tid) ON DELETE CASCADE,

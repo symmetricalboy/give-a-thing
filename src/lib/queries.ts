@@ -9,7 +9,6 @@ import {
   inArray,
   isNull,
   lt,
-  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -20,6 +19,7 @@ import {
   getNextUtcMidnightIso,
   isUnlimitedPullAccount,
 } from "@/lib/generator/pull-service";
+import { releaseExpiredCollectionReservations } from "@/lib/maker/collection-service";
 import {
   buildBlueskyComposerIntentUrl,
   isOfferRevocableNow,
@@ -47,6 +47,8 @@ export interface ProfileMysteryBoxCollection {
   name: string;
   description: string | null;
   totalItems: number;
+  priceCents: number;
+  platformFeeBps: number;
   remainingCount: number;
   viewerHasClaimedToday: boolean;
   createdAtIso: string;
@@ -164,7 +166,7 @@ export async function getDailyPullStatus(
           eq(schema.things.discovererDid, viewerDid),
           eq(schema.things.pullUtcDate, pullUtcDate),
           isNull(schema.things.collectionId),
-          ne(schema.things.status, "unclaimed")
+          inArray(schema.things.status, ["held", "escrowed"])
         )
       )
       .orderBy(desc(schema.things.createdAt))
@@ -330,7 +332,7 @@ export async function getThingDetailWithLedger(thingTid: string) {
     .limit(1);
 
   const row = rows[0];
-  if (!row || row.status === "unclaimed") return null;
+  if (!row || (row.status !== "held" && row.status !== "escrowed")) return null;
 
   const [ledgerRows, openOfferRows] = await Promise.all([
     db
@@ -461,10 +463,10 @@ export async function searchDiscoveryCatalog(params: {
 
     const whereCond = params.category
       ? and(
-          ne(schema.things.status, "unclaimed"),
+          inArray(schema.things.status, ["held", "escrowed"]),
           eq(schema.things.category, params.category)
         )
-      : ne(schema.things.status, "unclaimed");
+      : inArray(schema.things.status, ["held", "escrowed"]);
 
     const [rows, totalRes] = await Promise.all([
       db
@@ -493,7 +495,7 @@ export async function searchDiscoveryCatalog(params: {
     };
   }
 
-  const conditions = [ne(schema.things.status, "unclaimed")];
+  const conditions = [inArray(schema.things.status, ["held", "escrowed"])];
   if (params.category) {
     conditions.push(eq(schema.things.category, params.category));
   }
@@ -703,7 +705,7 @@ export async function searchDirectoryUsers(params: {
           .where(
             and(
               inArray(schema.things.currentOwnerDid, playerDids),
-              ne(schema.things.status, "unclaimed")
+              inArray(schema.things.status, ["held", "escrowed"])
             )
           )
           .groupBy(schema.things.currentOwnerDid),
@@ -716,7 +718,7 @@ export async function searchDirectoryUsers(params: {
           .where(
             and(
               inArray(schema.things.discovererDid, playerDids),
-              ne(schema.things.status, "unclaimed")
+              inArray(schema.things.status, ["held", "escrowed"])
             )
           )
           .groupBy(schema.things.discovererDid),
@@ -806,6 +808,8 @@ export async function getPlayerProfile(
   const player = userRows[0];
   if (!player) return null;
 
+  await releaseExpiredCollectionReservations();
+
   const pullUtcDate = getCurrentUtcDateString();
   const nextPullUtcIso = getNextUtcMidnightIso();
 
@@ -829,7 +833,7 @@ export async function getPlayerProfile(
       .where(
         and(
           eq(schema.things.currentOwnerDid, player.did),
-          ne(schema.things.status, "unclaimed")
+          inArray(schema.things.status, ["held", "escrowed"])
         )
       )
       .orderBy(desc(schema.things.createdAt)),
@@ -844,7 +848,7 @@ export async function getPlayerProfile(
       .where(
         and(
           eq(schema.things.discovererDid, player.did),
-          ne(schema.things.status, "unclaimed")
+          inArray(schema.things.status, ["held", "escrowed"])
         )
       ),
     db
@@ -951,13 +955,18 @@ export async function getPlayerProfile(
     activeCollections = creatorCollectionRows
       .map((c) => {
         const remainingCount = remainingMap.get(c.collectionTid) ?? 0;
+        const isPaid = c.priceCents > 0;
         return {
           collectionTid: c.collectionTid,
           name: c.name,
           description: c.description,
           totalItems: c.totalItems,
+          priceCents: c.priceCents,
+          platformFeeBps: c.platformFeeBps,
           remainingCount,
-          viewerHasClaimedToday: viewerClaimedTodaySet.has(c.collectionTid),
+          // Paid boxes have NO once-per-day cooldown—buyers can buy as many pulls as they want
+          viewerHasClaimedToday:
+            !isPaid && viewerClaimedTodaySet.has(c.collectionTid),
           createdAtIso: c.createdAt.toISOString(),
         };
       })

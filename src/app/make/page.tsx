@@ -17,6 +17,10 @@ import {
   type CreatorStudioCollectionSummary,
 } from "@/lib/maker/collection-service";
 import { getCurrentSession } from "@/lib/session";
+import {
+  syncCreatorPayoutStatus,
+  type CreatorPayoutStatus,
+} from "@/lib/stripe/connect";
 
 export const dynamic = "force-dynamic";
 
@@ -32,15 +36,32 @@ export default async function MakeThingsPage() {
 
   if (isMakerUnlocked && session) {
     let initialCollections: CreatorStudioCollectionSummary[] = [];
+    let initialPayoutStatus: CreatorPayoutStatus = {
+      stripeConfigured: false,
+      connected: false,
+      payoutsReady: false,
+      stripeAccountId: null,
+      cardPaymentsStatus: "unconfigured",
+      payoutsStatus: "unconfigured",
+      requirementsDue: false,
+    };
+
     try {
       initialCollections = await listCreatorCollectionsForStudio(session.did);
     } catch (err) {
       console.warn("[/make] Could not load creator collections:", err);
     }
 
+    try {
+      initialPayoutStatus = await syncCreatorPayoutStatus(session.did);
+    } catch (err) {
+      console.warn("[/make] Could not sync Stripe payout status:", err);
+    }
+
     return (
       <MakerStudioClient
         initialCollections={initialCollections}
+        initialPayoutStatus={initialPayoutStatus}
         creatorHandle={session.handle}
       />
     );

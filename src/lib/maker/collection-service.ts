@@ -1,10 +1,9 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import sharp, { type Metadata } from "sharp";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import {
   getAppPdsAgent,
-  mintCanonicalThingOnAppPds,
 } from "@/lib/atproto/app-pds";
 import {
   deleteUserFavoriteOnPds,
@@ -29,6 +28,11 @@ import {
   type StrongRef,
 } from "@/lib/lexicons";
 import { storeSpriteAssets } from "@/lib/storage";
+import {
+  estimateMysteryBoxPayoutBreakdown,
+  MAX_PAID_PULL_CENTS,
+  MAX_PLATFORM_FEE_BPS,
+} from "@/lib/stripe/pricing";
 
 export const MIN_COLLECTION_ITEMS = 5;
 export const MAX_COLLECTION_ITEMS = 50;
@@ -84,6 +88,20 @@ export const PublishCollectionInputSchema = z.object({
     .trim()
     .max(280, "Collection description must be 280 characters or fewer.")
     .optional(),
+  priceCents: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_PAID_PULL_CENTS)
+    .optional()
+    .default(0),
+  platformFeeBps: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_PLATFORM_FEE_BPS)
+    .optional()
+    .default(0),
   items: z
     .array(CreatorThingDraftItemSchema)
     .min(
@@ -94,6 +112,11 @@ export const PublishCollectionInputSchema = z.object({
       MAX_COLLECTION_ITEMS,
       `Collections can include up to ${MAX_COLLECTION_ITEMS} things at once.`
     ),
+});
+
+export const UpdateCollectionPricingInputSchema = z.object({
+  priceCents: z.number().int().min(0).max(MAX_PAID_PULL_CENTS),
+  platformFeeBps: z.number().int().min(0).max(MAX_PLATFORM_FEE_BPS).default(0),
 });
 
 export type PublishCollectionInput = z.infer<
@@ -247,6 +270,18 @@ export async function publishCreatorCollection(
     throw new Error("Creator account not found. Please log in again.");
   }
 
+  const priceCents = parsed.priceCents ?? 0;
+  const platformFeeBps = priceCents === 0 ? 0 : (parsed.platformFeeBps ?? 0);
+  const breakdown = estimateMysteryBoxPayoutBreakdown(priceCents, platformFeeBps);
+  if (!breakdown.valid) {
+    throw new Error(breakdown.validationError ?? "Invalid collection pricing.");
+  }
+  if (priceCents > 0 && (!creator.stripeAccountId || !creator.stripePayoutsReady)) {
+    throw new Error(
+      "Connect and complete your payout method setup before setting a paid price on a mystery box."
+    );
+  }
+
   const pdsAgent = await resolveCreatorPdsAgent(creatorDid);
   if (!pdsAgent) {
     throw new Error(
@@ -342,6 +377,8 @@ export async function publishCreatorCollection(
       name: parsed.collectionName,
       description: parsed.collectionDescription || null,
       totalItems: preparedItems.length,
+      priceCents,
+      platformFeeBps,
       createdAt,
     });
 
@@ -451,8 +488,106 @@ export async function publishCreatorCollection(
     collectionTid,
     name: parsed.collectionName,
     totalItems: insertedThings.length,
+    priceCents,
+    platformFeeBps,
     catalogNumbers: insertedThings.map((r) => r.catalogNumber),
   };
+}
+
+export async function updateCreatorCollectionPricing(params: {
+  creatorDid: string;
+  collectionTid: string;
+  rawInput: unknown;
+}) {
+  const parsed = UpdateCollectionPricingInputSchema.parse(params.rawInput);
+  const priceCents = parsed.priceCents;
+  const platformFeeBps = priceCents === 0 ? 0 : parsed.platformFeeBps;
+
+  const breakdown = estimateMysteryBoxPayoutBreakdown(priceCents, platformFeeBps);
+  if (!breakdown.valid) {
+    throw new Error(breakdown.validationError ?? "Invalid collection pricing.");
+  }
+
+  const db = getDb();
+  const [[creator], [collection]] = await Promise.all([
+    db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.did, params.creatorDid))
+      .limit(1),
+    db
+      .select()
+      .from(schema.thingCollections)
+      .where(eq(schema.thingCollections.collectionTid, params.collectionTid))
+      .limit(1),
+  ]);
+
+  if (!creator) {
+    throw new Error("Creator account not found. Please log in again.");
+  }
+  if (!collection) {
+    throw new Error("Collection not found.");
+  }
+  if (collection.creatorDid !== params.creatorDid) {
+    throw new Error("Only the collection creator can update its pricing.");
+  }
+
+  if (priceCents > 0 && (!creator.stripeAccountId || !creator.stripePayoutsReady)) {
+    throw new Error(
+      "Connect and complete your payout method setup before charging for pulls on a mystery box."
+    );
+  }
+
+  const [updated] = await db
+    .update(schema.thingCollections)
+    .set({
+      priceCents,
+      platformFeeBps,
+    })
+    .where(eq(schema.thingCollections.collectionTid, params.collectionTid))
+    .returning();
+
+  return updated!;
+}
+
+/**
+ * Releases any `"reserved"` items whose pending Stripe Checkout Session has expired
+ * back to `"unclaimed"` so abandoned checkouts never permanently lock Mystery Box items.
+ */
+export async function releaseExpiredCollectionReservations(): Promise<void> {
+  const db = getDb();
+  const now = new Date();
+
+  const expiredRows = await db
+    .update(schema.collectionPurchases)
+    .set({ status: "expired" })
+    .where(
+      and(
+        eq(schema.collectionPurchases.status, "pending"),
+        lte(schema.collectionPurchases.expiresAt, now)
+      )
+    )
+    .returning({ thingTid: schema.collectionPurchases.thingTid });
+
+  if (expiredRows.length > 0) {
+    const tids = expiredRows.map((r) => r.thingTid);
+    await db
+      .update(schema.things)
+      .set({ status: "unclaimed" })
+      .where(
+        and(
+          inArray(schema.things.thingTid, tids),
+          eq(schema.things.status, "reserved")
+        )
+      );
+  }
+}
+
+export class CreatorCannotPullOwnBoxError extends Error {
+  constructor() {
+    super("You can't pull from your own mystery box collection!");
+    this.name = "CreatorCannotPullOwnBoxError";
+  }
 }
 
 export class CollectionAlreadyClaimedTodayError extends Error {
@@ -472,13 +607,149 @@ export class CollectionSoldOutError extends Error {
 }
 
 /**
- * Draws a random unclaimed Thing from a creator's profile Mystery Box collection,
- * enforcing the same once-per-UTC-day rule as the standard daily pull.
+ * Shared PDS ledger #0 + recipient PDS holding + provenance + live feed broadcast
+ * for both free Mystery Box draws and fulfilled paid Mystery Box purchases.
+ */
+export async function finalizeCollectionItemDelivery(params: {
+  thing: typeof schema.things.$inferSelect;
+  creatorDid: string;
+  recipientDid: string;
+  recipientHandle: string;
+}): Promise<void> {
+  const db = getDb();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const entryTid = nextTid();
+
+  const canonicalThingRef: StrongRef = {
+    uri:
+      params.thing.canonicalAtUri ??
+      `at://${params.creatorDid}/com.giveathing.thing/${params.thing.thingTid}`,
+    cid: params.thing.canonicalAtCid ?? `bafkrei${params.thing.thingTid}`,
+  };
+
+  let ledgerRef: StrongRef | null = null;
+  try {
+    const appAgent = await getAppPdsAgent();
+    if (appAgent?.session?.did) {
+      const ledgerRes = await appAgent.com.atproto.repo.putRecord({
+        repo: appAgent.session.did,
+        collection: LEXICON_NSIDS.LEDGER,
+        rkey: entryTid,
+        record: {
+          $type: LEXICON_NSIDS.LEDGER,
+          thing: canonicalThingRef,
+          sequenceNum: 0,
+          owner: params.recipientDid,
+          via: "daily_pull",
+          occurredAt: nowIso,
+        },
+      });
+      ledgerRef = { uri: ledgerRes.data.uri, cid: ledgerRes.data.cid };
+    }
+  } catch (err) {
+    console.warn("[collection-delivery] App PDS ledger warning:", err);
+  }
+
+  const spriteBuf = params.thing.spritePngBase64
+    ? Buffer.from(params.thing.spritePngBase64, "base64")
+    : undefined;
+  let sprite512Buf: Buffer | undefined = spriteBuf;
+  if (spriteBuf) {
+    const m = await sharp(spriteBuf).metadata();
+    if (m.width !== 512 || m.height !== 512) {
+      sprite512Buf = await sharp(spriteBuf)
+        .resize(512, 512, { kernel: sharp.kernel.nearest })
+        .png({ compressionLevel: 9, palette: true, colors: 48 })
+        .toBuffer();
+    }
+  }
+
+  const genesisProvenance: ProvenanceHop[] = [
+    {
+      sequenceNum: 0,
+      owner: params.recipientDid,
+      handleSnapshot: params.recipientHandle,
+      via: "daily_pull",
+      occurredAt: nowIso,
+    },
+  ];
+
+  const holdingRef = await putUserHoldingOnPds({
+    ownerDid: params.recipientDid,
+    thingTid: params.thing.thingTid,
+    thingRef: canonicalThingRef,
+    catalogNumber: params.thing.catalogNumber,
+    name: params.thing.name,
+    category: params.thing.category,
+    description: params.thing.description,
+    iconPngBuffer: sprite512Buf,
+    status: "held",
+    acquiredAtIso: nowIso,
+    provenance: genesisProvenance,
+  });
+
+  await db
+    .update(schema.things)
+    .set({
+      latestLedgerAtUri: ledgerRef?.uri ?? null,
+      latestLedgerAtCid: ledgerRef?.cid ?? null,
+      currentHoldingAtUri: holdingRef?.uri ?? null,
+    })
+    .where(eq(schema.things.thingTid, params.thing.thingTid));
+
+  await db.insert(schema.provenanceEntries).values({
+    entryTid,
+    thingTid: params.thing.thingTid,
+    sequenceNum: 0,
+    fromDid: params.creatorDid,
+    fromHandleSnapshot: null,
+    toDid: params.recipientDid,
+    toHandleSnapshot: params.recipientHandle,
+    via: "daily_pull",
+    note: null,
+    ledgerAtUri: ledgerRef?.uri ?? null,
+    ledgerAtCid: ledgerRef?.cid ?? null,
+    userProofAtUri: holdingRef?.uri ?? null,
+    userProofAtCid: holdingRef?.cid ?? null,
+    occurredAt: now,
+  });
+
+  const [feedRow] = await db
+    .insert(schema.feedEvents)
+    .values({
+      eventType: "daily_pull",
+      actorDid: params.recipientDid,
+      targetDid: null,
+      thingTid: params.thing.thingTid,
+      sequenceNum: 0,
+      note: null,
+      createdAt: now,
+    })
+    .returning();
+
+  if (feedRow) {
+    broadcastFeedEvent({
+      id: feedRow.id,
+      eventType: "daily_pull",
+      actorDid: params.recipientDid,
+      targetDid: null,
+      thingTid: params.thing.thingTid,
+      createdAt: nowIso,
+    });
+  }
+}
+
+/**
+ * Draws a random unclaimed Thing from a creator's FREE profile Mystery Box collection,
+ * enforcing the once-per-UTC-day rule and blocking creators from pulling on their own boxes.
  */
 export async function claimFromCollectionMysteryBox(params: {
   collectionTid: string;
   claimerDid: string;
 }) {
+  await releaseExpiredCollectionReservations();
+
   const db = getDb();
   const pullUtcDate = getCurrentUtcDateString();
 
@@ -492,6 +763,17 @@ export async function claimFromCollectionMysteryBox(params: {
     throw new Error("Collection not found.");
   }
 
+  // Strictly block ALL users (including @giveathing.com) from pulling on their own Mystery Boxes
+  if (collection.creatorDid === params.claimerDid) {
+    throw new CreatorCannotPullOwnBoxError();
+  }
+
+  if (collection.priceCents > 0) {
+    throw new Error(
+      "This mystery box requires payment—use the Buy button to purchase a pull!"
+    );
+  }
+
   const [claimer] = await db
     .select()
     .from(schema.users)
@@ -503,12 +785,6 @@ export async function claimFromCollectionMysteryBox(params: {
   }
 
   const unlimited = isUnlimitedPullAccount(claimer);
-
-  if (!unlimited && collection.creatorDid === params.claimerDid) {
-    throw new Error(
-      "You created this mystery box collection—share your profile so other players can draw from it!"
-    );
-  }
 
   if (!unlimited) {
     const [existingClaim] = await db
@@ -622,128 +898,12 @@ export async function claimFromCollectionMysteryBox(params: {
     };
   });
 
-  const now = new Date();
-  const nowIso = now.toISOString();
-  const entryTid = nextTid();
-
-  const canonicalThingRef: StrongRef = {
-    uri:
-      claimed.thing.canonicalAtUri ??
-      `at://${collection.creatorDid}/com.giveathing.thing/${claimed.thing.thingTid}`,
-    cid: claimed.thing.canonicalAtCid ?? `bafkrei${claimed.thing.thingTid}`,
-  };
-
-  // Record genesis ledger #0 on App PDS + holding on Claimer's PDS
-  let ledgerRef: StrongRef | null = null;
-  try {
-    const appAgent = await getAppPdsAgent();
-    if (appAgent?.session?.did) {
-      const ledgerRes = await appAgent.com.atproto.repo.putRecord({
-        repo: appAgent.session.did,
-        collection: LEXICON_NSIDS.LEDGER,
-        rkey: entryTid,
-        record: {
-          $type: LEXICON_NSIDS.LEDGER,
-          thing: canonicalThingRef,
-          sequenceNum: 0,
-          owner: params.claimerDid,
-          via: "daily_pull",
-          occurredAt: nowIso,
-        },
-      });
-      ledgerRef = { uri: ledgerRes.data.uri, cid: ledgerRes.data.cid };
-    }
-  } catch (err) {
-    console.warn("[collection-claim] App PDS ledger warning:", err);
-  }
-
-  const spriteBuf = claimed.thing.spritePngBase64
-    ? Buffer.from(claimed.thing.spritePngBase64, "base64")
-    : undefined;
-  let sprite512Buf: Buffer | undefined = spriteBuf;
-  if (spriteBuf) {
-    const m = await sharp(spriteBuf).metadata();
-    if (m.width !== 512 || m.height !== 512) {
-      sprite512Buf = await sharp(spriteBuf)
-        .resize(512, 512, { kernel: sharp.kernel.nearest })
-        .png({ compressionLevel: 9, palette: true, colors: 48 })
-        .toBuffer();
-    }
-  }
-
-  const genesisProvenance: ProvenanceHop[] = [
-    {
-      sequenceNum: 0,
-      owner: params.claimerDid,
-      handleSnapshot: claimer.handle,
-      via: "daily_pull",
-      occurredAt: nowIso,
-    },
-  ];
-
-  const holdingRef = await putUserHoldingOnPds({
-    ownerDid: params.claimerDid,
-    thingTid: claimed.thing.thingTid,
-    thingRef: canonicalThingRef,
-    catalogNumber: claimed.thing.catalogNumber,
-    name: claimed.thing.name,
-    category: claimed.thing.category,
-    description: claimed.thing.description,
-    iconPngBuffer: sprite512Buf,
-    status: "held",
-    acquiredAtIso: nowIso,
-    provenance: genesisProvenance,
+  await finalizeCollectionItemDelivery({
+    thing: claimed.thing,
+    creatorDid: collection.creatorDid,
+    recipientDid: params.claimerDid,
+    recipientHandle: claimer.handle,
   });
-
-  await db
-    .update(schema.things)
-    .set({
-      latestLedgerAtUri: ledgerRef?.uri ?? null,
-      latestLedgerAtCid: ledgerRef?.cid ?? null,
-      currentHoldingAtUri: holdingRef?.uri ?? null,
-    })
-    .where(eq(schema.things.thingTid, claimed.thing.thingTid));
-
-  await db.insert(schema.provenanceEntries).values({
-    entryTid,
-    thingTid: claimed.thing.thingTid,
-    sequenceNum: 0,
-    fromDid: collection.creatorDid,
-    fromHandleSnapshot: null,
-    toDid: params.claimerDid,
-    toHandleSnapshot: claimer.handle,
-    via: "daily_pull",
-    note: null,
-    ledgerAtUri: ledgerRef?.uri ?? null,
-    ledgerAtCid: ledgerRef?.cid ?? null,
-    userProofAtUri: holdingRef?.uri ?? null,
-    userProofAtCid: holdingRef?.cid ?? null,
-    occurredAt: now,
-  });
-
-  const [feedRow] = await db
-    .insert(schema.feedEvents)
-    .values({
-      eventType: "daily_pull",
-      actorDid: params.claimerDid,
-      targetDid: null,
-      thingTid: claimed.thing.thingTid,
-      sequenceNum: 0,
-      note: null,
-      createdAt: now,
-    })
-    .returning();
-
-  if (feedRow) {
-    broadcastFeedEvent({
-      id: feedRow.id,
-      eventType: "daily_pull",
-      actorDid: params.claimerDid,
-      targetDid: null,
-      thingTid: claimed.thing.thingTid,
-      createdAt: nowIso,
-    });
-  }
 
   return {
     thingTid: claimed.thing.thingTid,
@@ -789,6 +949,14 @@ export async function revokeAndDestroyCreatedThing(params: {
     throw new Error("Only the creator of this thing can revoke and destroy it.");
   }
 
+  await releaseExpiredCollectionReservations();
+
+  if (thingRow.status === "reserved" && !params.skipCreatorPdsDelete) {
+    throw new Error(
+      "This thing is currently reserved in an active buyer checkout. Try again in a few minutes if checkout is cancelled."
+    );
+  }
+
   // 1. Delete genesis `com.giveathing.thing/<thingTid>` from the creator's PDS
   if (!params.skipCreatorPdsDelete) {
     const creatorAgent = await resolveCreatorPdsAgent(params.actorDid);
@@ -806,7 +974,7 @@ export async function revokeAndDestroyCreatedThing(params: {
   }
 
   // 2. If claimed/held/escrowed, remove holding, favorite, and open offers from current holder's PDS
-  if (thingRow.status !== "unclaimed") {
+  if (thingRow.status === "held" || thingRow.status === "escrowed") {
     const openOffers = await db
       .select()
       .from(schema.escrowOffers)
@@ -858,6 +1026,8 @@ export interface CreatorStudioCollectionSummary {
   name: string;
   description: string | null;
   totalItems: number;
+  priceCents: number;
+  platformFeeBps: number;
   unclaimedCount: number;
   claimedCount: number;
   createdAtIso: string;
@@ -877,6 +1047,7 @@ export interface CreatorStudioCollectionSummary {
 export async function listCreatorCollectionsForStudio(
   creatorDid: string
 ): Promise<CreatorStudioCollectionSummary[]> {
+  await releaseExpiredCollectionReservations();
   const db = getDb();
   const cols = await db
     .select()
@@ -910,13 +1081,18 @@ export async function listCreatorCollectionsForStudio(
     const unclaimedCount = cItems.filter(
       (t) => t.status === "unclaimed"
     ).length;
+    const claimedCount = cItems.filter(
+      (t) => t.status === "held" || t.status === "escrowed"
+    ).length;
     return {
       collectionTid: c.collectionTid,
       name: c.name,
       description: c.description,
       totalItems: c.totalItems,
+      priceCents: c.priceCents,
+      platformFeeBps: c.platformFeeBps,
       unclaimedCount,
-      claimedCount: cItems.length - unclaimedCount,
+      claimedCount,
       createdAtIso: c.createdAt.toISOString(),
       items: cItems.map((t) => ({
         thingTid: t.thingTid,

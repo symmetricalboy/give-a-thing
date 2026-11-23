@@ -8,9 +8,12 @@ import {
   ArrowRight,
   Check,
   Clock,
+  Coins,
   Copy,
   ExternalLink,
   Gift,
+  Hammer,
+  Loader2,
   RotateCcw,
   ScrollText,
   Search,
@@ -26,6 +29,7 @@ import type {
   ProfileSocialUser,
   ThingCardItem,
 } from "@/lib/queries";
+import { formatUsdCents } from "@/lib/stripe/pricing";
 import { RpgModal } from "./RpgModal";
 import { ThingGridCard } from "./ThingGridCard";
 import { GiveThingModal, type GiveableThingSummary } from "./GiveThingModal";
@@ -138,10 +142,14 @@ export function UserProfileClient({
   const [copiedOffer, setCopiedOffer] = useState<string | null>(null);
   const [revokingTid, setRevokingTid] = useState<string | null>(null);
 
-  // Mystery Box Collection draw states
+  // Mystery Box Collection draw & paid checkout states
   const [mysteryBoxes, setMysteryBoxes] =
     useState<ProfileMysteryBoxCollection[]>(activeCollections);
   const [claimingBoxTid, setClaimingBoxTid] = useState<string | null>(null);
+  const [fulfillingCheckout, setFulfillingCheckout] = useState(false);
+  const [checkoutBannerError, setCheckoutBannerError] = useState<string | null>(
+    null
+  );
   const [boxErrors, setBoxErrors] = useState<Record<string, string>>({});
   const [unboxedByCollection, setUnboxedByCollection] = useState<
     Record<string, ClaimedCollectionThingView>
@@ -150,6 +158,104 @@ export function UserProfileClient({
   useEffect(() => {
     setMysteryBoxes(activeCollections);
   }, [activeCollections]);
+
+  // Handle Stripe Checkout return (`?checkout_session_id=...`) or cancel (`?checkout_cancelled=...`)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const sessionId = url.searchParams.get("checkout_session_id");
+    const cancelledPurchaseId = url.searchParams.get("checkout_cancelled");
+    const collectionHint = url.searchParams.get("collection");
+
+    if (!sessionId && !cancelledPurchaseId) return;
+
+    url.searchParams.delete("checkout_session_id");
+    url.searchParams.delete("checkout_cancelled");
+    url.searchParams.delete("collection");
+    window.history.replaceState({}, "", url.pathname + url.search);
+
+    if (cancelledPurchaseId) {
+      void fetch("/api/collections/checkout/fulfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cancelPurchaseId: cancelledPurchaseId }),
+      })
+        .then(() => router.refresh())
+        .catch(() => {});
+      return;
+    }
+
+    if (sessionId) {
+      setFulfillingCheckout(true);
+      setCheckoutBannerError(null);
+      void fetch("/api/collections/checkout/fulfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkoutSessionId: sessionId }),
+      })
+        .then(async (res) => {
+          const data = (await res.json()) as {
+            ok?: boolean;
+            error?: string;
+            thing?: ClaimedCollectionThingView & {
+              collectionTid: string;
+              remainingCount: number;
+            };
+          };
+          if (!res.ok || !data.thing) {
+            setCheckoutBannerError(
+              data.error ?? "Could not unwrap your purchased mystery thing."
+            );
+            return;
+          }
+          const resolvedTid =
+            data.thing.collectionTid || collectionHint || "";
+          if (resolvedTid) {
+            setUnboxedByCollection((prev) => ({
+              ...prev,
+              [resolvedTid]: data.thing!,
+            }));
+            setMysteryBoxes((prev) => {
+              const exists = prev.some((b) => b.collectionTid === resolvedTid);
+              if (!exists) {
+                return [
+                  {
+                    collectionTid: resolvedTid,
+                    name: data.thing!.category,
+                    description: null,
+                    totalItems: 5,
+                    priceCents: 0,
+                    platformFeeBps: 0,
+                    remainingCount: data.thing!.remainingCount,
+                    viewerHasClaimedToday: false,
+                    createdAtIso: new Date().toISOString(),
+                  },
+                  ...prev,
+                ];
+              }
+              return prev.map((b) =>
+                b.collectionTid === resolvedTid
+                  ? {
+                      ...b,
+                      remainingCount: data.thing!.remainingCount,
+                      viewerHasClaimedToday: false,
+                    }
+                  : b
+              );
+            });
+          }
+          router.refresh();
+        })
+        .catch(() => {
+          setCheckoutBannerError(
+            "Network error verifying your purchase—check YOUR THINGS in a moment!"
+          );
+        })
+        .finally(() => {
+          setFulfillingCheckout(false);
+        });
+    }
+  }, [router]);
 
   useEffect(() => {
     setFollowing(initialIsFollowing);
@@ -163,13 +269,62 @@ export function UserProfileClient({
     setSocialFollowingMap(m);
   }, [followingList, followersList]);
 
+  const hasFreeMysteryBoxWithTimer =
+    !isSelf && mysteryBoxes.some((b) => b.priceCents === 0 && b.remainingCount > 0);
+
   useEffect(() => {
     const needsClock =
-      (isSelf && outgoingEscrows.length > 0) || mysteryBoxes.length > 0;
+      (isSelf && outgoingEscrows.length > 0) || hasFreeMysteryBoxWithTimer;
     if (!needsClock) return;
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [isSelf, outgoingEscrows.length, mysteryBoxes.length]);
+  }, [isSelf, outgoingEscrows.length, hasFreeMysteryBoxWithTimer]);
+
+  async function handleBuyPaidMysteryBox(collectionTid: string) {
+    setClaimingBoxTid(collectionTid);
+    setBoxErrors((prev) => {
+      const copy = { ...prev };
+      delete copy[collectionTid];
+      return copy;
+    });
+
+    try {
+      const res = await fetch(
+        `/api/collections/${encodeURIComponent(collectionTid)}/checkout`,
+        { method: "POST" }
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        checkoutUrl?: string;
+        soldOut?: boolean;
+        error?: string;
+      };
+
+      if (!res.ok || !data.checkoutUrl) {
+        if (data.soldOut) {
+          setMysteryBoxes((prev) =>
+            prev.filter((b) => b.collectionTid !== collectionTid)
+          );
+        } else {
+          setBoxErrors((prev) => ({
+            ...prev,
+            [collectionTid]:
+              data.error ?? "Could not start checkout for this mystery box.",
+          }));
+        }
+        setClaimingBoxTid(null);
+        return;
+      }
+
+      window.location.assign(data.checkoutUrl);
+    } catch {
+      setBoxErrors((prev) => ({
+        ...prev,
+        [collectionTid]: "Network error reaching checkout.",
+      }));
+      setClaimingBoxTid(null);
+    }
+  }
 
   async function handleClaimMysteryBox(collectionTid: string) {
     setClaimingBoxTid(collectionTid);
@@ -471,6 +626,25 @@ export function UserProfileClient({
         </p>
       )}
 
+      {checkoutBannerError && (
+        <p
+          role="alert"
+          className="rounded border border-[#ff4d6d] bg-[#ff4d6d]/15 px-4 py-2.5 text-xs text-[#ff99ac]"
+        >
+          {checkoutBannerError}
+        </p>
+      )}
+
+      {fulfillingCheckout && (
+        <section className="rpg-panel-blue p-5 flex items-center justify-center gap-3 text-sm text-[#fdf6e9]">
+          <Loader2
+            className="h-4 w-4 animate-spin text-[#ffd15c]"
+            aria-hidden="true"
+          />
+          <span>Unwrapping your purchased Mystery Thing…</span>
+        </section>
+      )}
+
       {/* Creator Mystery Box Collections (Automatically disappears once remainingCount === 0) */}
       {mysteryBoxes.some(
         (b) => b.remainingCount > 0 || Boolean(unboxedByCollection[b.collectionTid])
@@ -487,13 +661,15 @@ export function UserProfileClient({
               </h2>
             </div>
 
-            <div className="inline-flex items-center gap-1.5 rounded bg-[#160f24] px-2.5 py-1 text-xs text-[#cfc3e8] border border-[#4da6ff]/50">
-              <Clock className="h-3.5 w-3.5 text-[#8ec8ff]" aria-hidden="true" />
-              <span>Day resets in</span>
-              <span className="font-pixel text-[#fdf6e9]">
-                {formatUtcCountdown(nextPullUtcIso, nowMs)}
-              </span>
-            </div>
+            {hasFreeMysteryBoxWithTimer ? (
+              <div className="inline-flex items-center gap-1.5 rounded bg-[#160f24] px-2.5 py-1 text-xs text-[#cfc3e8] border border-[#4da6ff]/50">
+                <Clock className="h-3.5 w-3.5 text-[#8ec8ff]" aria-hidden="true" />
+                <span>Day resets in</span>
+                <span className="font-pixel text-[#fdf6e9]">
+                  {formatUtcCountdown(nextPullUtcIso, nowMs)}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-4">
@@ -507,6 +683,8 @@ export function UserProfileClient({
                 const unboxed = unboxedByCollection[box.collectionTid];
                 const isClaiming = claimingBoxTid === box.collectionTid;
                 const boxErr = boxErrors[box.collectionTid];
+                const isPaidBox = box.priceCents > 0;
+                const formattedPrice = formatUsdCents(box.priceCents);
 
                 return (
                   <article
@@ -515,9 +693,21 @@ export function UserProfileClient({
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="space-y-1">
-                        <h3 className="font-pixel text-sm sm:text-base text-[#fdf6e9]">
-                          {box.name}
-                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-pixel text-sm sm:text-base text-[#fdf6e9]">
+                            {box.name}
+                          </h3>
+                          {isPaidBox ? (
+                            <span className="inline-flex items-center gap-1 rounded border border-[#4be3a0]/65 bg-[#251a3c] px-2.5 py-0.5 font-pixel text-[10px] text-[#4be3a0]">
+                              <Coins className="h-3 w-3" aria-hidden="true" />
+                              {formattedPrice} / PULL
+                            </span>
+                          ) : (
+                            <span className="rounded border border-[#8ec8ff]/55 bg-[#251a3c] px-2.5 py-0.5 font-pixel text-[10px] text-[#8ec8ff]">
+                              FREE · 1 / DAY
+                            </span>
+                          )}
+                        </div>
                         {box.description ? (
                           <p className="text-xs sm:text-sm text-[#cfc3e8] max-w-2xl">
                             {box.description}
@@ -600,7 +790,25 @@ export function UserProfileClient({
                               View History
                             </Link>
 
-                            {viewerUnlimitedPulls && box.remainingCount > 0 ? (
+                            {/* Paid boxes allow unlimited purchases until sold out */}
+                            {!isSelf && isPaidBox && box.remainingCount > 0 ? (
+                              <button
+                                type="button"
+                                disabled={isClaiming}
+                                onClick={() =>
+                                  void handleBuyPaidMysteryBox(box.collectionTid)
+                                }
+                                className="rpg-btn-primary inline-flex items-center gap-2 px-3.5 py-2 font-pixel text-[11px]"
+                              >
+                                <Coins className="h-3.5 w-3.5" aria-hidden="true" />
+                                {isClaiming
+                                  ? "Redirecting…"
+                                  : `Buy Another · ${formattedPrice}`}
+                              </button>
+                            ) : !isSelf &&
+                              !isPaidBox &&
+                              viewerUnlimitedPulls &&
+                              box.remainingCount > 0 ? (
                               <button
                                 type="button"
                                 disabled={isClaiming}
@@ -616,7 +824,7 @@ export function UserProfileClient({
                           </div>
                         </div>
                       </div>
-                    ) : box.viewerHasClaimedToday ? (
+                    ) : !isPaidBox && !isSelf && box.viewerHasClaimedToday ? (
                       <div className="flex flex-col sm:flex-row items-center gap-4 py-2 text-center sm:text-left">
                         <div className="rpg-panel-subtle flex h-24 w-24 shrink-0 items-center justify-center p-2">
                           <img
@@ -655,24 +863,69 @@ export function UserProfileClient({
                             />
                           </div>
                           <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8] max-w-md">
-                            Draw 1 surprise custom thing per day from{" "}
-                            <strong>@{playerHandle}</strong>&apos;s{" "}
-                            <strong>{box.name}</strong> collection before the
-                            box runs out!
+                            {isPaidBox ? (
+                              <>
+                                Buy a surprise custom thing for{" "}
+                                <strong className="text-[#ffd15c]">
+                                  {formattedPrice}
+                                </strong>{" "}
+                                from <strong>@{playerHandle}</strong>&apos;s{" "}
+                                <strong>{box.name}</strong> collection—no daily
+                                limit while supplies last!
+                              </>
+                            ) : (
+                              <>
+                                Draw 1 surprise custom thing per day from{" "}
+                                <strong>@{playerHandle}</strong>&apos;s{" "}
+                                <strong>{box.name}</strong> collection before
+                                the box runs out!
+                              </>
+                            )}
                           </p>
                         </div>
 
-                        {!viewerDid ? (
+                        {isSelf ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded border border-[#9e762a]/60 bg-[#251a3c] px-3 py-2 text-xs text-[#cfc3e8]">
+                              Your Mystery Box—share your profile for others to{" "}
+                              {isPaidBox ? "buy!" : "draw!"}
+                            </span>
+                            {viewerUnlimitedPulls ? (
+                              <Link
+                                href={`/make?tab=collections&editPrice=${encodeURIComponent(box.collectionTid)}`}
+                                className="rpg-btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 font-pixel text-[10px]"
+                              >
+                                <Coins
+                                  className="h-3.5 w-3.5"
+                                  aria-hidden="true"
+                                />
+                                {isPaidBox ? "Change Price" : "Set Price"}
+                              </Link>
+                            ) : null}
+                          </div>
+                        ) : !viewerDid ? (
                           <Link
                             href={`/login?returnTo=/u/${encodeURIComponent(playerHandle)}`}
                             className="rpg-btn-blue shrink-0 inline-flex items-center gap-2 px-4 py-2.5 font-pixel text-xs"
                           >
-                            LOGIN TO DRAW
+                            {isPaidBox
+                              ? `LOGIN TO BUY · ${formattedPrice}`
+                              : "LOGIN TO DRAW"}
                           </Link>
-                        ) : isSelf && !viewerUnlimitedPulls ? (
-                          <span className="rounded border border-[#9e762a]/60 bg-[#251a3c] px-3 py-2 text-xs text-[#cfc3e8]">
-                            Share your profile so friends can draw from this box!
-                          </span>
+                        ) : isPaidBox ? (
+                          <button
+                            type="button"
+                            disabled={isClaiming}
+                            onClick={() =>
+                              void handleBuyPaidMysteryBox(box.collectionTid)
+                            }
+                            className="rpg-btn-primary shrink-0 inline-flex items-center gap-2 px-5 py-3 font-pixel text-xs"
+                          >
+                            <Coins className="h-4 w-4" aria-hidden="true" />
+                            {isClaiming
+                              ? "Opening Checkout…"
+                              : `Buy a Mystery Thing · ${formattedPrice}`}
+                          </button>
                         ) : (
                           <button
                             type="button"

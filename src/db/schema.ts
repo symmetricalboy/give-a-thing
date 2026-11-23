@@ -24,6 +24,10 @@ export const users = pgTable(
     autoImportBskyFollows: boolean("auto_import_bsky_follows")
       .notNull()
       .default(false),
+    stripeAccountId: text("stripe_account_id"),
+    stripePayoutsReady: boolean("stripe_payouts_ready")
+      .notNull()
+      .default(false),
     lastBskySyncAt: timestamp("last_bsky_sync_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -325,11 +329,51 @@ export const thingCollections = pgTable(
     name: varchar("name", { length: 100 }).notNull(),
     description: varchar("description", { length: 280 }),
     totalItems: integer("total_items").notNull(),
+    priceCents: integer("price_cents").notNull().default(0),
+    platformFeeBps: integer("platform_fee_bps").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [index("thing_collections_creator_idx").on(table.creatorDid)]
+);
+
+export const collectionPurchases = pgTable(
+  "collection_purchases",
+  {
+    purchaseId: text("purchase_id").primaryKey(),
+    collectionTid: text("collection_tid")
+      .notNull()
+      .references(() => thingCollections.collectionTid, {
+        onDelete: "cascade",
+      }),
+    thingTid: text("thing_tid").notNull(),
+    buyerDid: text("buyer_did")
+      .notNull()
+      .references(() => users.did, { onDelete: "cascade" }),
+    creatorDid: text("creator_did")
+      .notNull()
+      .references(() => users.did, { onDelete: "cascade" }),
+    stripeAccountId: text("stripe_account_id").notNull(),
+    checkoutSessionId: text("checkout_session_id").unique(),
+    paymentIntentId: text("payment_intent_id"),
+    amountCents: integer("amount_cents").notNull(),
+    platformFeeCents: integer("platform_fee_cents").notNull().default(0),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    fulfilledAt: timestamp("fulfilled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("collection_purchases_buyer_idx").on(table.buyerDid),
+    index("collection_purchases_collection_idx").on(table.collectionTid),
+    index("collection_purchases_status_exp_idx").on(
+      table.status,
+      table.expiresAt
+    ),
+  ]
 );
 
 export const collectionDailyClaims = pgTable(
