@@ -335,6 +335,11 @@ export async function publishCreatorCollection(
     );
   }
 
+  // Evict any unrevealed pre-generated daily cache item if a human creator picked the exact same name first
+  await db
+    .delete(schema.dailyPullCache)
+    .where(inArray(schema.dailyPullCache.canonicalFingerprint, fingerprints));
+
   // Validate all 512x512 PNGs & compute semantic embeddings
   const preparedItems: Array<{
     draft: CreatorThingDraftItem;

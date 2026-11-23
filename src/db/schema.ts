@@ -132,6 +132,35 @@ export const dailyPullLocks = pgTable(
   (table) => [primaryKey({ columns: [table.did, table.pullUtcDate] })]
 );
 
+export const dailyPullCache = pgTable(
+  "daily_pull_cache",
+  {
+    cacheTid: text("cache_tid").primaryKey(),
+    name: text("name").notNull(),
+    canonicalFingerprint: text("canonical_fingerprint").notNull().unique(),
+    subcategoryKey: text("subcategory_key").notNull(),
+    category: text("category").notNull(),
+    subcategory: text("subcategory").notNull(),
+    description: text("description").notNull(),
+    flavorText: text("flavor_text").notNull(),
+    uselessTrait: text("useless_trait").notNull(),
+    iconAlt: text("icon_alt").notNull(),
+    embedding: vector("embedding", { dimensions: 768 }).notNull(),
+    sprite64PngBase64: text("sprite64_png_base64").notNull(),
+    sprite512PngBase64: text("sprite512_png_base64").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("daily_pull_cache_created_idx").on(table.createdAt),
+    index("daily_pull_cache_embedding_hnsw_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops")
+    ),
+  ]
+);
+
 export const provenanceEntries = pgTable(
   "provenance_entries",
   {

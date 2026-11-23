@@ -144,6 +144,25 @@ async function main() {
         PRIMARY KEY (did, pull_utc_date)
       );
 
+      CREATE TABLE IF NOT EXISTS daily_pull_cache (
+        cache_tid TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        canonical_fingerprint TEXT NOT NULL UNIQUE,
+        subcategory_key TEXT NOT NULL,
+        category TEXT NOT NULL,
+        subcategory TEXT NOT NULL,
+        description TEXT NOT NULL,
+        flavor_text TEXT NOT NULL,
+        useless_trait TEXT NOT NULL,
+        icon_alt TEXT NOT NULL,
+        embedding vector(768) NOT NULL,
+        sprite64_png_base64 TEXT NOT NULL,
+        sprite512_png_base64 TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS daily_pull_cache_created_idx ON daily_pull_cache (created_at);
+      CREATE INDEX IF NOT EXISTS daily_pull_cache_embedding_hnsw_idx ON daily_pull_cache USING hnsw (embedding vector_cosine_ops);
+
       CREATE TABLE IF NOT EXISTS provenance_entries (
         id BIGSERIAL PRIMARY KEY,
         entry_tid TEXT NOT NULL UNIQUE,

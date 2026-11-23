@@ -10,7 +10,10 @@ import {
   migrateLegacyLedgerRecordsOnAppPds,
   publishAtmosphereGameDefineOnAppPds,
 } from "@/lib/atproto/app-pds";
-import { healMissingCatalogGaps } from "@/lib/generator/pull-service";
+import {
+  healMissingCatalogGaps,
+  replenishDailyPullCache,
+} from "@/lib/generator/pull-service";
 import { revokeAndDestroyCreatedThing } from "@/lib/maker/collection-service";
 
 const globalForBg = globalThis as unknown as {
@@ -66,16 +69,28 @@ export function startBackgroundServices(): void {
       });
   }
 
-  // 2. Automatically detect & fill any skipped catalog numbers (such as #0011) shortly after boot and periodically
+  // 2. Automatically detect & fill any skipped catalog numbers AND warm the 10-item Daily Pull cache
   setTimeout(() => {
-    void healMissingCatalogGaps().catch((err) => {
-      console.warn("[catalog-heal] Startup check warning:", err);
-    });
+    void healMissingCatalogGaps()
+      .catch((err) => {
+        console.warn("[catalog-heal] Startup check warning:", err);
+      })
+      .finally(() => {
+        void replenishDailyPullCache().catch((err) => {
+          console.warn("[daily-pull-cache] Startup warm warning:", err);
+        });
+      });
   }, 5_000);
   setInterval(() => {
-    void healMissingCatalogGaps().catch((err) => {
-      console.warn("[catalog-heal] Periodic check warning:", err);
-    });
+    void healMissingCatalogGaps()
+      .catch((err) => {
+        console.warn("[catalog-heal] Periodic check warning:", err);
+      })
+      .finally(() => {
+        void replenishDailyPullCache().catch((err) => {
+          console.warn("[daily-pull-cache] Periodic warm warning:", err);
+        });
+      });
   }, 10 * 60_000);
 
   // 3. Start real-time ATProtocol Jetstream listener

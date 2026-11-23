@@ -30,12 +30,14 @@ import {
   sanitizeGiftNote,
 } from "../src/lib/trading/trade-service";
 import {
+  DAILY_PULL_CACHE_TARGET,
   findInteriorMissingCatalogNumbers,
   findLowestMissingCatalogNumber,
   getCurrentUtcDateString,
   getNextUtcMidnightIso,
   isUnlimitedPullAccount,
 } from "../src/lib/generator/pull-service";
+import * as dbSchema from "../src/db/schema";
 import { parseGeneratedThingConcept } from "../src/lib/generator/gemini";
 import { USER_GIVEATHING_COLLECTIONS } from "../src/lib/account/delete-account";
 import {
@@ -910,5 +912,35 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(
       parseStripeWebhookSecrets(" whsec_connect_123 , whsec_platform_456 ")
     ).toEqual(["whsec_connect_123", "whsec_platform_456"]);
+  });
+
+  it("maintains a 10-item unrevealed Daily Pull cache with atomic pop, deduplication, and background replenishment", () => {
+    expect(DAILY_PULL_CACHE_TARGET).toBe(10);
+    expect(dbSchema.dailyPullCache).toBeDefined();
+
+    const pullServiceSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "lib", "generator", "pull-service.ts"),
+      "utf8"
+    );
+    expect(pullServiceSrc).toContain("FOR UPDATE SKIP LOCKED");
+    expect(pullServiceSrc).toContain("replenishDailyPullCache");
+
+    const backgroundSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "lib", "atproto", "background.ts"),
+      "utf8"
+    );
+    expect(backgroundSrc).toContain("replenishDailyPullCache");
+
+    const dedupSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "lib", "generator", "dedup.ts"),
+      "utf8"
+    );
+    expect(dedupSrc).toContain("dailyPullCache");
+
+    const migrateSrc = fs.readFileSync(
+      path.join(process.cwd(), "scripts", "migrate.ts"),
+      "utf8"
+    );
+    expect(migrateSrc).toContain("CREATE TABLE IF NOT EXISTS daily_pull_cache");
   });
 });

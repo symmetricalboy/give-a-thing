@@ -102,15 +102,25 @@ export async function checkCatalogCollision(
 ): Promise<CollisionMatch | null> {
   const fingerprint = computeCanonicalFingerprint(candidateName);
 
-  const exactRows = await db
-    .select({
-      catalogNumber: schema.things.catalogNumber,
-      name: schema.things.name,
-      category: schema.things.category,
-    })
-    .from(schema.things)
-    .where(eq(schema.things.canonicalFingerprint, fingerprint))
-    .limit(1);
+  const [exactRows, exactCachedRows] = await Promise.all([
+    db
+      .select({
+        catalogNumber: schema.things.catalogNumber,
+        name: schema.things.name,
+        category: schema.things.category,
+      })
+      .from(schema.things)
+      .where(eq(schema.things.canonicalFingerprint, fingerprint))
+      .limit(1),
+    db
+      .select({
+        name: schema.dailyPullCache.name,
+        category: schema.dailyPullCache.category,
+      })
+      .from(schema.dailyPullCache)
+      .where(eq(schema.dailyPullCache.canonicalFingerprint, fingerprint))
+      .limit(1),
+  ]);
 
   if (exactRows[0]) {
     return {
@@ -121,23 +131,48 @@ export async function checkCatalogCollision(
       reason: "exact_fingerprint",
     };
   }
+  if (exactCachedRows[0]) {
+    return {
+      catalogNumber: 0,
+      name: exactCachedRows[0].name,
+      category: exactCachedRows[0].category,
+      similarity: 1.0,
+      reason: "exact_fingerprint",
+    };
+  }
 
   const similarityExpr = sql<number>`1 - (${cosineDistance(
     schema.things.embedding,
     candidateEmbedding
   )})`;
+  const cacheSimilarityExpr = sql<number>`1 - (${cosineDistance(
+    schema.dailyPullCache.embedding,
+    candidateEmbedding
+  )})`;
 
-  const semanticRows = await db
-    .select({
-      catalogNumber: schema.things.catalogNumber,
-      name: schema.things.name,
-      category: schema.things.category,
-      similarity: similarityExpr,
-    })
-    .from(schema.things)
-    .where(gt(similarityExpr, SEMANTIC_SIMILARITY_THRESHOLD))
-    .orderBy((t) => desc(t.similarity))
-    .limit(1);
+  const [semanticRows, semanticCachedRows] = await Promise.all([
+    db
+      .select({
+        catalogNumber: schema.things.catalogNumber,
+        name: schema.things.name,
+        category: schema.things.category,
+        similarity: similarityExpr,
+      })
+      .from(schema.things)
+      .where(gt(similarityExpr, SEMANTIC_SIMILARITY_THRESHOLD))
+      .orderBy((t) => desc(t.similarity))
+      .limit(1),
+    db
+      .select({
+        name: schema.dailyPullCache.name,
+        category: schema.dailyPullCache.category,
+        similarity: cacheSimilarityExpr,
+      })
+      .from(schema.dailyPullCache)
+      .where(gt(cacheSimilarityExpr, SEMANTIC_SIMILARITY_THRESHOLD))
+      .orderBy((t) => desc(t.similarity))
+      .limit(1),
+  ]);
 
   if (semanticRows[0]) {
     return {
@@ -145,6 +180,15 @@ export async function checkCatalogCollision(
       name: semanticRows[0].name,
       category: semanticRows[0].category,
       similarity: Number(semanticRows[0].similarity),
+      reason: "semantic_vector",
+    };
+  }
+  if (semanticCachedRows[0]) {
+    return {
+      catalogNumber: 0,
+      name: semanticCachedRows[0].name,
+      category: semanticCachedRows[0].category,
+      similarity: Number(semanticCachedRows[0].similarity),
       reason: "semantic_vector",
     };
   }
