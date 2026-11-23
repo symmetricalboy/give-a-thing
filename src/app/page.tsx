@@ -1,5 +1,5 @@
 import React from "react";
-import { count } from "drizzle-orm";
+import { count, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getCurrentSession } from "@/lib/session";
 import { HomeLandingHero } from "@/components/HomeLandingHero";
@@ -12,7 +12,10 @@ export default async function HomePage() {
 
   try {
     const db = getDb();
-    const res = await db.select({ value: count() }).from(schema.things);
+    const res = await db
+      .select({ value: count() })
+      .from(schema.things)
+      .where(inArray(schema.things.status, ["held", "escrowed"]));
     totalThingsCount = Number(res[0]?.value ?? 0);
   } catch {
     // Graceful fallback when DATABASE_URL is not yet connected locally

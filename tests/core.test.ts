@@ -496,7 +496,11 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(heroSrc).not.toContain("NEWS &amp; UPDATES");
     expect(heroSrc).toContain("LOGIN");
     expect(heroSrc).toContain("GET A THING");
-    expect(heroSrc).toContain("claim invite link sent to them!");
+    expect(heroSrc).toContain(
+      "Get a Thing Every Day, Make New Things, &amp; Give Things Away!"
+    );
+    expect(heroSrc).toContain("Now that&apos;s a lot of things!");
+    expect(heroSrc).not.toContain("HOW IT WORKS");
     expect(heroSrc).not.toContain("140-character gift note");
 
     const newsPageSrc = fs.readFileSync(

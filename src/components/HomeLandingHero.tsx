@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Gift, Send, Sparkles, Star } from "lucide-react";
+import { Gift, Sparkles } from "lucide-react";
 import { RpgModal } from "./RpgModal";
 import { AtmosphereLoginForm } from "./AtmosphereLoginForm";
 
@@ -202,16 +202,19 @@ export function HomeLandingHero({
             GIVE A THING
           </h1>
 
-          <p className="font-pixel text-xs sm:text-sm text-[#ff99ac]">
-            Get a Pointless Thing Every Day &amp; Give Things Away!
+          <p className="font-pixel text-xs sm:text-sm leading-relaxed text-balance text-[#ff99ac]">
+            Get a Thing Every Day, Make New Things, &amp; Give Things Away!
           </p>
 
-          <p className="mx-auto max-w-xl text-sm sm:text-base leading-relaxed text-[#fdf6e9]">
-            Every day at <strong>00:00 UTC</strong>, you can unwrap one mystery
-            box to receive a completely unique, utterly pointless 16-bit thing.
+          <p className="mx-auto max-w-xl text-sm sm:text-base leading-relaxed text-pretty text-[#fdf6e9]">
+            Once a day, you can come &amp; get a new random thing. You will
+            receive a completely unique, utterly pointless &amp; strange thing.
             Things don&apos;t boost stats, unlock levels, or do anything useful
-            at all—they just exist to be collected, admired, and tossed back and
-            forth between friends forever!
+            at all. They just exist to be collected, admired, and tossed back
+            &amp; forth between friends! Still not enough things? You can make
+            your own things, too! You can design your very own collections of
+            pointless things, &amp; you can give them away for free, or even
+            choose to sell them! Now that&apos;s a lot of things!
           </p>
 
           <div className="flex items-center justify-center pt-3 pb-1">
@@ -232,79 +235,6 @@ export function HomeLandingHero({
                 LOGIN
               </button>
             )}
-          </div>
-        </div>
-      </section>
-
-      {/* How You Play & Interact With Give a Thing */}
-      <section aria-label="How Give a Thing Works" className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-[#ffd15c]" aria-hidden="true" />
-          <h2 className="font-pixel text-sm sm:text-base text-[#ffd15c]">
-            HOW IT WORKS
-          </h2>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          {/* Step 1 — Red Accent */}
-          <div className="rpg-panel-red p-5 space-y-2.5">
-            <div className="inline-flex items-center gap-2 rounded bg-[#ff4d6d]/20 px-2.5 py-1 font-pixel text-[10px] text-[#ff99ac]">
-              <Gift className="h-3.5 w-3.5" aria-hidden="true" />
-              1. UNWRAP DAILY
-            </div>
-            <h3 className="font-pixel text-xs sm:text-sm text-[#fdf6e9]">
-              One Brand-New Thing Per Day
-            </h3>
-            <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8]">
-              Log in with your ATmosphere Account and head to{" "}
-              <Link href="/get" className="text-[#ff99ac] underline">
-                GET A THING
-              </Link>{" "}
-              once every UTC day. Every single thing is one-of-a-kind with its
-              own 16-bit pixel icon—no duplicates are ever created.
-            </p>
-          </div>
-
-          {/* Step 2 — Blue Accent */}
-          <div className="rpg-panel-blue p-5 space-y-2.5">
-            <div className="inline-flex items-center gap-2 rounded bg-[#4da6ff]/20 px-2.5 py-1 font-pixel text-[10px] text-[#8ec8ff]">
-              <Send className="h-3.5 w-3.5" aria-hidden="true" />
-              2. GIVE &amp; TRADE
-            </div>
-            <h3 className="font-pixel text-xs sm:text-sm text-[#fdf6e9]">
-              Pass Things to Any Friend
-            </h3>
-            <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8]">
-              Give any of your things away at any time with an optional gift
-              note etched forever onto its ownership history. Even friends who
-              haven&apos;t joined yet can get a claim invite link sent to them!
-            </p>
-          </div>
-
-          {/* Step 3 — Gold Accent */}
-          <div className="rpg-panel p-5 space-y-2.5">
-            <div className="inline-flex items-center gap-2 rounded bg-[#ffd15c]/20 px-2.5 py-1 font-pixel text-[10px] text-[#ffd15c]">
-              <Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
-              3. SHOW OFF &amp; EXPLORE
-            </div>
-            <h3 className="font-pixel text-xs sm:text-sm text-[#fdf6e9]">
-              Top 8, Friends &amp; Live Feeds
-            </h3>
-            <p className="text-xs sm:text-sm leading-relaxed text-[#cfc3e8]">
-              Pin your favorite 8 things on{" "}
-              <Link href="/profile" className="text-[#ffd15c] underline">
-                YOUR THINGS
-              </Link>
-              , find your Bluesky friends, watch pulls and gifts roll by on{" "}
-              <Link href="/happened" className="text-[#8ec8ff] underline">
-                THINGS THAT HAPPENED
-              </Link>
-              , and search{" "}
-              <Link href="/search" className="text-[#4be3a0] underline">
-                FIND THINGS
-              </Link>
-              .
-            </p>
           </div>
         </div>
       </section>
