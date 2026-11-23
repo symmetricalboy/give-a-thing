@@ -16,6 +16,7 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  Wallet,
   Wand2,
 } from "lucide-react";
 import {
@@ -160,6 +161,7 @@ export function MakerStudioClient({
   const [payoutStatus, setPayoutStatus] =
     useState<CreatorPayoutStatus>(initialPayoutStatus);
   const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [stripeReturnNotice, setStripeReturnNotice] = useState<string | null>(
     null
   );
@@ -316,6 +318,7 @@ export function MakerStudioClient({
 
   const handleStartPayoutOnboarding = async (mode: "onboard" | "update") => {
     setOnboardingBusy(true);
+    setOnboardingError(null);
     setStudioError(null);
     setEditPriceError(null);
     try {
@@ -328,6 +331,7 @@ export function MakerStudioClient({
       if (!res.ok || !data.url) {
         const msg =
           data.error ?? "Could not open Stripe payout setup. Please try again.";
+        setOnboardingError(msg);
         setStudioError(msg);
         setEditPriceError(msg);
         setOnboardingBusy(false);
@@ -336,6 +340,7 @@ export function MakerStudioClient({
       window.location.assign(data.url);
     } catch {
       const msg = "Network error starting Stripe payout setup.";
+      setOnboardingError(msg);
       setStudioError(msg);
       setEditPriceError(msg);
       setOnboardingBusy(false);
@@ -988,6 +993,93 @@ export function MakerStudioClient({
           </Link>
         </section>
       ) : null}
+
+      {/* Always-Available Creator Payout Setup Bar (Set Up Anytime Before Making a Collection!) */}
+      <div className="rpg-panel-subtle p-4 sm:p-5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Wallet className="h-4 w-4 text-[#ffd15c]" aria-hidden="true" />
+              <p className="font-pixel text-xs text-[#ffd15c]">
+                CREATOR PAYOUTS (OPTIONAL)
+              </p>
+              {payoutStatus.payoutsReady ? (
+                <span className="inline-flex items-center gap-1 rounded bg-[#4be3a0]/20 px-2 py-0.5 font-pixel text-[9px] text-[#4be3a0]">
+                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                  CONNECTED &amp; READY
+                </span>
+              ) : payoutStatus.connected ? (
+                <span className="rounded bg-[#ffd15c]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ffd15c]">
+                  SETUP INCOMPLETE
+                </span>
+              ) : (
+                <span className="rounded bg-[#160f24] px-2 py-0.5 font-pixel text-[9px] text-[#cfc3e8]">
+                  NOT CONNECTED
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-sm text-[#cfc3e8]">
+              {payoutStatus.stripeAccountId === "platform"
+                ? "Connected directly to Give a Thing's Stripe account! You can charge per pull on any collection."
+                : payoutStatus.payoutsReady
+                  ? "Your Stripe payout method is ready! You can publish paid Mystery Boxes or update prices on existing collections anytime."
+                  : payoutStatus.connected
+                    ? "Finish your Stripe payout details anytime so you're ready to charge per pull on Mystery Boxes."
+                    : "Making free Mystery Boxes needs zero setup! Want to charge per pull? You can connect your Stripe payout method right now in advance—even before creating your first collection."}
+            </p>
+          </div>
+
+          {payoutStatus.stripeConfigured &&
+          payoutStatus.stripeAccountId !== "platform" ? (
+            <button
+              type="button"
+              disabled={onboardingBusy}
+              onClick={() =>
+                void handleStartPayoutOnboarding(
+                  payoutStatus.payoutsReady ? "update" : "onboard"
+                )
+              }
+              className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-2 font-pixel text-[10px] ${
+                payoutStatus.payoutsReady
+                  ? "rpg-btn-secondary text-[#8ec8ff]"
+                  : "rpg-btn-blue"
+              }`}
+            >
+              {onboardingBusy ? (
+                <>
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                  Opening Stripe…
+                </>
+              ) : (
+                <>
+                  {payoutStatus.payoutsReady
+                    ? "Payout Settings"
+                    : payoutStatus.connected
+                      ? "Finish Payout Setup"
+                      : "Connect Payout Method"}
+                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                </>
+              )}
+            </button>
+          ) : null}
+        </div>
+
+        {onboardingError ? (
+          <div
+            role="alert"
+            className="rounded border-2 border-[#ff4d6d] bg-[#ff4d6d]/15 p-3 text-xs sm:text-sm text-[#ffd6de] flex items-start gap-2.5"
+          >
+            <AlertTriangle
+              className="h-4 w-4 shrink-0 text-[#ff4d6d] mt-0.5"
+              aria-hidden="true"
+            />
+            <span>{onboardingError}</span>
+          </div>
+        ) : null}
+      </div>
 
       {/* Studio Mode Tabs */}
       <div role="tablist" aria-label="Workshop Views" className="rpg-tablist">
@@ -2027,45 +2119,6 @@ export function MakerStudioClient({
           hidden={studioTab !== "manage"}
           className="space-y-6"
         >
-          {/* Top-level Payout Method Bar for Managing Existing Collections */}
-          <div className="rpg-panel-subtle p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <p className="font-pixel text-xs text-[#ffd15c]">
-                PAYOUTS &amp; EXISTING COLLECTION PRICING
-              </p>
-              <p className="text-xs sm:text-sm text-[#cfc3e8]">
-                {payoutStatus.payoutsReady
-                  ? "Your Stripe payout account is connected! Click Set Price or Change Price on any collection below."
-                  : "Connect your Stripe payout method first, then click Set Price on any collection below to charge per pull."}
-              </p>
-            </div>
-            {payoutStatus.stripeConfigured ? (
-              <button
-                type="button"
-                disabled={onboardingBusy}
-                onClick={() =>
-                  void handleStartPayoutOnboarding(
-                    payoutStatus.payoutsReady ? "update" : "onboard"
-                  )
-                }
-                className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-2 font-pixel text-[10px] ${
-                  payoutStatus.payoutsReady
-                    ? "rpg-btn-secondary text-[#8ec8ff]"
-                    : "rpg-btn-blue"
-                }`}
-              >
-                {onboardingBusy
-                  ? "Opening Stripe…"
-                  : payoutStatus.payoutsReady
-                    ? "Payout Settings"
-                    : payoutStatus.connected
-                      ? "Finish Payout Setup"
-                      : "Connect Payout Method"}
-                <ExternalLink className="h-3 w-3" aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
-
           {collections.length === 0 ? (
             <div className="rpg-panel p-6 sm:p-8 text-center space-y-3">
               <p className="font-pixel text-sm text-[#ffd15c]">

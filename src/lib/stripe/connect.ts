@@ -302,80 +302,80 @@ export async function createCreatorPayoutOnboardingLink(
   let stripeAccountId = user.stripeAccountId;
 
   if (!stripeAccountId) {
-    const created = await stripe.v2.core.accounts.create({
-      display_name: user.displayName || `@${user.handle}`,
-      dashboard: "full",
-      defaults: {
-        currency: "usd",
-        responsibilities: {
-          fees_collector: "stripe",
-          losses_collector: "stripe",
-        },
-        profile: {
-          doing_business_as: `@${user.handle}`,
-          product_description: `Collectible 16-bit Mystery Box items created by @${user.handle} on Give a Thing`,
-          ...(appUrl.startsWith("https://")
-            ? { business_url: `${appUrl}/u/${encodeURIComponent(user.handle)}` }
-            : {}),
-        },
-      },
-      identity: {
-        country: "US",
-      },
-      configuration: {
-        merchant: {
-          capabilities: {
-            card_payments: { requested: true },
+    try {
+      const created = await stripe.v2.core.accounts.create({
+        display_name: user.displayName || `@${user.handle}`,
+        dashboard: "full",
+        defaults: {
+          currency: "usd",
+          responsibilities: {
+            fees_collector: "stripe",
+            losses_collector: "stripe",
+          },
+          profile: {
+            doing_business_as: `@${user.handle}`,
+            product_description: `Collectible 16-bit Mystery Box items created by @${user.handle} on Give a Thing`,
+            ...(appUrl.startsWith("https://")
+              ? {
+                  business_url: `${appUrl}/u/${encodeURIComponent(user.handle)}`,
+                }
+              : {}),
           },
         },
-      },
-      metadata: {
-        giveathing_did: user.did,
-        giveathing_handle: user.handle,
-      },
-      include: ["configuration.merchant", "defaults", "requirements"],
-    });
+        identity: {
+          country: "US",
+        },
+        configuration: {
+          merchant: {
+            capabilities: {
+              card_payments: { requested: true },
+            },
+          },
+        },
+        metadata: {
+          giveathing_did: user.did,
+          giveathing_handle: user.handle,
+        },
+        include: ["configuration.merchant", "defaults", "requirements"],
+      });
 
-    stripeAccountId = created.id;
-    await db
-      .update(schema.users)
-      .set({
-        stripeAccountId,
-        stripePayoutsReady: false,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.users.did, creatorDid));
+      stripeAccountId = created.id;
+      await db
+        .update(schema.users)
+        .set({
+          stripeAccountId,
+          stripePayoutsReady: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.did, creatorDid));
+    } catch (createErr) {
+      console.error("[stripe/connect] v2.core.accounts.create error:", createErr);
+      const msg =
+        createErr instanceof Error ? createErr.message : String(createErr);
+      if (msg.toLowerCase().includes("must be activated in order to create accounts")) {
+        throw new Error(
+          "Give a Thing's Stripe Connect platform profile still needs one final live-mode activation step in the Stripe Dashboard (https://dashboard.stripe.com/account/onboarding) before new creator payout accounts can be created."
+        );
+      }
+      throw createErr;
+    }
   }
 
   const returnUrl = `${appUrl}/make?stripe=return`;
   const refreshUrl = `${appUrl}/api/stripe/connect/refresh`;
 
   try {
-    const useCaseType =
-      mode === "update" && user.stripePayoutsReady
-        ? "account_update"
-        : "account_onboarding";
-
+    void mode;
     const v2Link = await stripe.v2.core.accountLinks.create({
       account: stripeAccountId,
-      use_case:
-        useCaseType === "account_update"
-          ? {
-              type: "account_update",
-              account_update: {
-                collection_options: { fields: "eventually_due" },
-                refresh_url: refreshUrl,
-                return_url: returnUrl,
-              },
-            }
-          : {
-              type: "account_onboarding",
-              account_onboarding: {
-                collection_options: { fields: "eventually_due" },
-                refresh_url: refreshUrl,
-                return_url: returnUrl,
-              },
-            },
+      use_case: {
+        type: "account_onboarding",
+        account_onboarding: {
+          collection_options: { fields: "eventually_due" },
+          refresh_url: refreshUrl,
+          return_url: returnUrl,
+        },
+      },
     });
 
     return { url: v2Link.url, stripeAccountId };
