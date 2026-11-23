@@ -941,6 +941,7 @@ export async function fulfillPaidCollectionPurchase(params: {
       creatorDid: txResult.creatorDid,
       recipientDid: existingPurchase.buyerDid,
       recipientHandle: buyer.handle,
+      via: "mystery_box_purchase",
     });
   }
 

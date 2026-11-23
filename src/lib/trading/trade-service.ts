@@ -13,7 +13,12 @@ import {
   writeUserTransferOnPds,
 } from "@/lib/atproto/user-pds";
 import { broadcastFeedEvent } from "@/lib/feed/bus";
-import { nextTid, type ProvenanceHop, type StrongRef } from "@/lib/lexicons";
+import {
+  nextTid,
+  type ProvenanceHop,
+  type ProvenanceVia,
+  type StrongRef,
+} from "@/lib/lexicons";
 import { removeFavoriteOnTransfer } from "@/lib/social/favorites";
 
 export const ESCROW_REVOKE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -74,7 +79,7 @@ async function loadProvenanceHops(thingTid: string): Promise<ProvenanceHop[]> {
     sequenceNum: r.sequenceNum,
     owner: r.toDid,
     handleSnapshot: r.toHandleSnapshot,
-    via: r.via as "daily_pull" | "direct_gift" | "escrow_claim",
+    via: r.via as ProvenanceVia,
     ...(r.note ? { note: r.note } : {}),
     occurredAt: r.occurredAt.toISOString(),
   }));

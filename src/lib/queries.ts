@@ -25,6 +25,7 @@ import {
   isOfferRevocableNow,
 } from "@/lib/trading/trade-service";
 import { getPublicAppUrl } from "@/lib/atproto/oauth";
+import type { ProvenanceVia } from "@/lib/lexicons";
 import {
   fetchRichBlueskyProfile,
   searchBlueskyActors,
@@ -413,7 +414,7 @@ export async function getThingDetailWithLedger(thingTid: string) {
       id: l.id,
       entryTid: l.entryTid,
       sequenceNum: l.sequenceNum,
-      via: l.via as "daily_pull" | "direct_gift" | "escrow_claim",
+      via: l.via as ProvenanceVia,
       note: l.note,
       occurredAtIso: l.occurredAt.toISOString(),
       ledgerAtUri: l.ledgerAtUri,

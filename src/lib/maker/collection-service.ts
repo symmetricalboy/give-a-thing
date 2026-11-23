@@ -682,6 +682,7 @@ export async function finalizeCollectionItemDelivery(params: {
   creatorDid: string;
   recipientDid: string;
   recipientHandle: string;
+  via: "mystery_box" | "mystery_box_purchase";
 }): Promise<void> {
   const db = getDb();
   const now = new Date();
@@ -708,7 +709,7 @@ export async function finalizeCollectionItemDelivery(params: {
           thing: canonicalThingRef,
           sequenceNum: 0,
           owner: params.recipientDid,
-          via: "daily_pull",
+          via: params.via,
           occurredAt: nowIso,
         },
       });
@@ -737,7 +738,7 @@ export async function finalizeCollectionItemDelivery(params: {
       sequenceNum: 0,
       owner: params.recipientDid,
       handleSnapshot: params.recipientHandle,
-      via: "daily_pull",
+      via: params.via,
       occurredAt: nowIso,
     },
   ];
@@ -773,7 +774,7 @@ export async function finalizeCollectionItemDelivery(params: {
     fromHandleSnapshot: null,
     toDid: params.recipientDid,
     toHandleSnapshot: params.recipientHandle,
-    via: "daily_pull",
+    via: params.via,
     note: null,
     ledgerAtUri: ledgerRef?.uri ?? null,
     ledgerAtCid: ledgerRef?.cid ?? null,
@@ -970,6 +971,7 @@ export async function claimFromCollectionMysteryBox(params: {
     creatorDid: collection.creatorDid,
     recipientDid: params.claimerDid,
     recipientHandle: claimer.handle,
+    via: "mystery_box",
   });
 
   return {

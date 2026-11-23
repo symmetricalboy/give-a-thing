@@ -88,7 +88,13 @@
         },
         "via": {
           "type": "string",
-          "knownValues": ["daily_pull", "direct_gift", "escrow_claim"]
+          "knownValues": [
+            "daily_pull",
+            "mystery_box",
+            "mystery_box_purchase",
+            "direct_gift",
+            "escrow_claim"
+          ]
         },
         "note": {
           "type": "string",

@@ -153,7 +153,7 @@ async function main() {
         from_handle_snapshot TEXT,
         to_did TEXT NOT NULL,
         to_handle_snapshot TEXT NOT NULL,
-        via VARCHAR(24) NOT NULL,
+        via VARCHAR(32) NOT NULL,
         note VARCHAR(140),
         ledger_at_uri TEXT,
         ledger_at_cid TEXT,
@@ -161,8 +161,27 @@ async function main() {
         user_proof_at_cid TEXT,
         occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE provenance_entries ALTER COLUMN via TYPE VARCHAR(32);
       CREATE UNIQUE INDEX IF NOT EXISTS provenance_thing_seq_idx ON provenance_entries (thing_tid, sequence_num);
       CREATE INDEX IF NOT EXISTS provenance_thing_idx ON provenance_entries (thing_tid);
+
+      -- Backfill initial provenance hop for fulfilled paid Mystery Box purchases
+      UPDATE provenance_entries pe
+      SET via = 'mystery_box_purchase'
+      FROM collection_purchases cp
+      WHERE pe.thing_tid = cp.thing_tid
+        AND pe.sequence_num = 0
+        AND cp.status = 'fulfilled'
+        AND pe.via = 'daily_pull';
+
+      -- Backfill initial provenance hop for free Mystery Box draws
+      UPDATE provenance_entries pe
+      SET via = 'mystery_box'
+      FROM things t
+      WHERE pe.thing_tid = t.thing_tid
+        AND pe.sequence_num = 0
+        AND t.collection_id IS NOT NULL
+        AND pe.via = 'daily_pull';
 
       CREATE TABLE IF NOT EXISTS escrow_offers (
         offer_tid TEXT PRIMARY KEY,

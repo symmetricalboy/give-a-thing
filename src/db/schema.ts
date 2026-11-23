@@ -145,7 +145,7 @@ export const provenanceEntries = pgTable(
     fromHandleSnapshot: text("from_handle_snapshot"),
     toDid: text("to_did").notNull(),
     toHandleSnapshot: text("to_handle_snapshot").notNull(),
-    via: varchar("via", { length: 24 }).notNull(),
+    via: varchar("via", { length: 32 }).notNull(),
     note: varchar("note", { length: 140 }),
     ledgerAtUri: text("ledger_at_uri"),
     ledgerAtCid: text("ledger_at_cid"),

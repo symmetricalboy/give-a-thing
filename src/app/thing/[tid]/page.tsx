@@ -170,13 +170,16 @@ export default async function ThingInspectorPage({
 
       {/* Ownership History ("All Previous Owners") */}
       <section
-        aria-label="Ownership History"
+        aria-labelledby="ownership-history-heading"
         className="rpg-panel p-5 sm:p-6 space-y-5"
       >
         <div className="flex items-center justify-between gap-2 border-b-2 border-[#9e762a]/50 pb-3">
           <div className="flex items-center gap-2">
             <ScrollText className="h-4 w-4 text-[#ffd15c]" aria-hidden="true" />
-            <h2 className="font-pixel text-xs sm:text-sm text-[#ffd15c]">
+            <h2
+              id="ownership-history-heading"
+              className="font-pixel text-xs sm:text-sm text-[#ffd15c]"
+            >
               OWNERSHIP HISTORY ({detail.provenance.length}{" "}
               {detail.provenance.length === 1 ? "STOP" : "STOPS"})
             </h2>
@@ -208,6 +211,26 @@ export default async function ThingInspectorPage({
                       {hop.via === "daily_pull" ? (
                         <span>
                           Discovered in the daily pull by{" "}
+                          <Link
+                            href={`/u/${encodeURIComponent(hop.toUser.handle)}`}
+                            className="font-semibold text-[#ffd15c] hover:underline"
+                          >
+                            @{hop.toUser.handle}
+                          </Link>
+                        </span>
+                      ) : hop.via === "mystery_box" ? (
+                        <span>
+                          Discovered in a Mystery Box by{" "}
+                          <Link
+                            href={`/u/${encodeURIComponent(hop.toUser.handle)}`}
+                            className="font-semibold text-[#ffd15c] hover:underline"
+                          >
+                            @{hop.toUser.handle}
+                          </Link>
+                        </span>
+                      ) : hop.via === "mystery_box_purchase" ? (
+                        <span>
+                          Purchased from a Mystery Box by{" "}
                           <Link
                             href={`/u/${encodeURIComponent(hop.toUser.handle)}`}
                             className="font-semibold text-[#ffd15c] hover:underline"

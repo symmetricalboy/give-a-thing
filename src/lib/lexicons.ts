@@ -46,6 +46,8 @@ export type StrongRef = z.infer<typeof StrongRefSchema>;
 
 export const ProvenanceViaSchema = z.enum([
   "daily_pull",
+  "mystery_box",
+  "mystery_box_purchase",
   "direct_gift",
   "escrow_claim",
 ]);

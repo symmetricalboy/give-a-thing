@@ -19,6 +19,7 @@ import {
   LedgerRecordSchema,
   LEXICON_NSIDS,
   nextTid,
+  ProvenanceViaSchema,
   ThingRecordSchema,
   USER_OAUTH_SCOPES,
 } from "../src/lib/lexicons";
@@ -852,6 +853,17 @@ describe("Give a Thing — Core Engine Verification", () => {
     expect(profileClientSrc).toContain("Buy Another");
     expect(profileClientSrc).not.toContain("setMysteryBoxes(activeCollections)");
     expect(profileClientSrc).toContain("FINAL THING · SOLD OUT!");
+
+    expect(ProvenanceViaSchema.parse("mystery_box")).toBe("mystery_box");
+    expect(ProvenanceViaSchema.parse("mystery_box_purchase")).toBe(
+      "mystery_box_purchase"
+    );
+    const thingPageSrc = fs.readFileSync(
+      path.join(process.cwd(), "src", "app", "thing", "[tid]", "page.tsx"),
+      "utf8"
+    );
+    expect(thingPageSrc).toContain("Discovered in a Mystery Box by");
+    expect(thingPageSrc).toContain("Purchased from a Mystery Box by");
 
     expect(PLATFORM_STRIPE_ACCOUNT_SENTINEL).toBe("platform");
     expect(parseStripeWebhookSecrets(undefined)).toEqual([]);
